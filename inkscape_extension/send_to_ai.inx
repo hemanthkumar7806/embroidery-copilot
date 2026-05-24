@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <name>Send to AI Assistant</name>
+  <id>org.inkscape.ai.send_to_ai</id>
+  <effect>
+    <object-type>all</object-type>
+    <effects-menu>
+      <submenu name="Inkscape AI"/>
+    </effects-menu>
+  </effect>
+  <script>
+    <command location="inx" interpreter="python">send_to_ai.py</command>
+  </script>
+</inkscape-extension>

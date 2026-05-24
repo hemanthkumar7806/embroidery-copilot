@@ -1,23 +1,16 @@
-"""This file contains the prompts for the agent."""
+"""Prompt loaders for preflight and chat."""
 
-import os
-from datetime import datetime
-
-from app.core.config import settings
+from pathlib import Path
 
 
-def load_system_prompt(**kwargs):
-    """Load the system prompt from the file."""
-    with open(os.path.join(os.path.dirname(__file__), "system.md"), "r") as f:
-        return f.read().format(
-            agent_name=settings.PROJECT_NAME + " Agent",
-            current_date_and_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            **kwargs,
-        )
+def _read_prompt(name: str) -> str:
+    path = Path(__file__).parent / name
+    return path.read_text(encoding="utf-8")
 
 
-def load_inkscape_action_prompt() -> str:
-    """Load the Inkscape action interpreter system prompt."""
-    path = os.path.join(os.path.dirname(__file__), "inkscape_action.md")
-    with open(path, "r") as f:
-        return f.read()
+def load_preflight_prompt() -> str:
+    return _read_prompt("preflight.md")
+
+
+def load_chat_prompt() -> str:
+    return _read_prompt("chat.md")

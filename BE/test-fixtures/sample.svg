@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:inkstitch="http://inkstitch.org/namespace"
+     xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     width="100mm" height="50mm" viewBox="0 0 100 50">
+  <g inkscape:groupmode="layer" inkscape:label="Layer 1" id="layer1">
+    <path id="text-path"
+          d="M 10 25 L 90 25"
+          fill="none"
+          stroke="#000000"
+          stroke-width="0.4"
+          inkstitch:stroke_method="running_stitch"
+          inkstitch:running_stitch_length_mm="2.5"
+          inkstitch:trim_after="true"/>
+    <path id="satin-col"
+          d="M 20 10 L 30 10 L 30 40 L 20 40 Z"
+          fill="#ff0000"
+          stroke="none"
+          inkstitch:satin_column="true"
+          inkstitch:expand="0.2"
+          inkstitch:underlay="true"/>
+  </g>
+</svg>

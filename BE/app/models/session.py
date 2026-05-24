@@ -1,34 +1,28 @@
-"""This file contains the session model for the application."""
+"""Session and message models for anonymous beta sessions."""
 
-from typing import (
-    TYPE_CHECKING,
-    List,
-)
+from datetime import UTC, datetime
+from typing import Optional
 
-from sqlmodel import (
-    Field,
-    Relationship,
-)
-
-from app.models.base import BaseModel
-
-if TYPE_CHECKING:
-    from app.models.user import User
+from sqlmodel import Field, SQLModel
 
 
-class Session(BaseModel, table=True):
-    """Session model for storing chat sessions.
-
-    Attributes:
-        id: The primary key
-        user_id: Foreign key to the user
-        name: Name of the session (defaults to empty string)
-        created_at: When the session was created
-        messages: Relationship to session messages
-        user: Relationship to the session owner
-    """
+class Session(SQLModel, table=True):
+    """Anonymous review session tied to one uploaded SVG."""
 
     id: str = Field(primary_key=True)
-    user_id: int = Field(foreign_key="user.id")
-    name: str = Field(default="")
-    user: "User" = Relationship(back_populates="sessions")
+    svg_path: str
+    design_report_json: str = Field(default="{}")
+    preflight_json: str = Field(default="{}")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    last_active_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class Message(SQLModel, table=True):
+    """Chat message within a session."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    session_id: str = Field(foreign_key="session.id", index=True)
+    role: str
+    content: str
+    sources_json: Optional[str] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
