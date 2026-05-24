@@ -1,0 +1,3 @@
+[console_scripts]
+inkscape-ai = inkscape_ai.server:main
+inkscape-ai-bridge = inkscape_ai.bridge:main

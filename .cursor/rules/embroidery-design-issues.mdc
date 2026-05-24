@@ -1,0 +1,36 @@
+---
+
+description: Use design report, issue-checker docs, and practical diagnosis when helping with embroidery/Ink/Stitch designs
+
+globs: ["**/*.svg", "**/inkspace-AI/**", "**/docs/rules/**", "**/docs/sources/**"]
+
+alwaysApply: false
+
+---
+
+
+
+# Embroidery design issue detection
+
+
+
+Follow [inkscape-mcp-invoke-tools](inkscape-mcp-invoke-tools.mdc) and **[embroidery-practical-diagnosis](embroidery-practical-diagnosis.mdc)** for MCP order, sanity checks, response shape, and root-cause priority.
+
+
+
+1. **Use `get_design_report`** via MCP (not from memory) with **`include_geometry: true`** when checking structure or complexity: elements, stitch types, params, node/segment counts when relevant.
+
+
+
+2. **Apply issue-checker rules**: Consult [docs/rules/issue-checker-cross-reference.md](docs/rules/issue-checker-cross-reference.md) and [docs/sources/community/reddit-troubleshoot-passes-no-stitch-out.md](docs/sources/community/reddit-troubleshoot-passes-no-stitch-out.md). Flag:
+
+   - **Excessive nodes**: if any single element has **very high** `node_count` (e.g. thousands) or the summary flags extreme complexity, suggest simplifying — treat **geometry as supporting detail**, not the default lead (see practical diagnosis rule).
+
+   - **Overuse of fill**: if almost all elements are fill, suggest satin for columns/thick lines and running/bean for thin lines and details.
+
+   - **Geometry/feasibility**: designs that pass Troubleshoot can still freeze on stitch plan or export; narrow fill pathing and extreme density are common causes.
+
+
+
+3. **Prefer user-friendly wording** when reporting issues: include element id and numbers when relevant (e.g. “This path has a lot of points (5200), which can slow or freeze export – try simplifying the shape” rather than only “node_count 5200”).
+

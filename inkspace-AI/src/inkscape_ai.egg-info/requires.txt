@@ -1,0 +1,7 @@
+mcp[cli]>=1.3.0
+inkex>=1.4
+Pillow>=10.0
+filelock>=3.0
+
+[dbus]
+PyGObject>=3.42

@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "inkscape-ai": {
+      "command": "py",
+      "args": ["-m", "inkscape_ai.server"],
+      "cwd": "E:\\user\\code\\MCP-chatbot\\inkspace-AI",
+      "env": {
+        "INKSCAPE_RECOVERY_MODE": "balanced",
+        "INKSCAPE_RECOVERY_KILL_POLICY": "port_only",
+        "INKSCAPE_RECOVERY_MAX_RETRIES": "1"
+      }
+    }
+  }
+}

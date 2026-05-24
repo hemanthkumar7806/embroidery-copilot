@@ -1,0 +1,87 @@
+---
+description: Practical embroidery diagnosis — MCP signals, sanity checks, root-cause order, mandatory response sections, conflict resolution
+alwaysApply: true
+---
+
+# Practical embroidery diagnosis engine
+
+Use with [inkscape-mcp-invoke-tools](inkscape-mcp-invoke-tools.mdc). For issue-checker cross-reference docs, see [docs/rules/issue-checker-cross-reference.md](docs/rules/issue-checker-cross-reference.md) when helpful.
+
+## After MCP (Step 2) — extract signals in plain language
+
+When **`MCP data unavailable`** is not in effect, translate tool output — **not raw JSON**. Always check when data exists:
+
+- **Lettering:** `trim_option` and related lettering JSON (trims between letters/words/lines).
+- **Stitch mix:** satin vs fill vs stroke/run; counts and object names (e.g. autosatin, run).
+- **Node / path density:** flag **extreme** node counts or tiny segments; do not lead with node math unless it clearly explains the symptom.
+- **Layers / visibility:** unexpected layers, many objects.
+- **Params:** `trim_after`, underlay flags, `max_stitch_length_mm`, export-related hints.
+
+## Mandatory sanity checks (every diagnosis)
+
+**Incomplete** if you skip this: in **every** embroidery diagnosis, **explicitly mention at least two** of these (by theme, plain language):
+
+1. **Hidden layers / duplicate objects** — stitching what is not visible in the working view.
+2. **Satin vs fill mismatch** — wrong stitch type for the shape or size.
+3. **Spacing affecting trims** — letters or paths too tight for trims to behave or to read cleanly.
+4. **Stabilizer/fabric mismatch** — e.g. knits vs woven, weight vs density, polo vs hat assumptions.
+5. **Machine trim behavior** — trim thresholds, format (e.g. PES) vs preview, hoop/software vs machine.
+
+Tie them into **### 🧵 What to do RIGHT NOW** or a short labeled bullet block.
+
+## Real-world sanity checks (Step 3)
+
+After tools (or without them), weigh: hidden/duplicate stitchables, wrong stitch type, tight spacing vs trims, fabric + stabilizer, machine trim/tension/speed. **If a shop-floor explanation fits the stitch-out better than the SVG signal, say so first.**
+
+## Root-cause priority (Step 4)
+
+Rank likely causes in this order unless symptoms clearly override:
+
+1. **Ink/Stitch / design** — hidden layers, wrong stitch type, lettering overrides (e.g. `trim_option`), export format quirks.
+2. **Fabric + stabilizer**
+3. **Machine behavior** (trims, tension, speed, limits)
+4. **Geometry / nodes** — **lowest** unless extreme or clearly causal
+
+## Conflict resolution (MCP vs stitch-out)
+
+If MCP and heuristics disagree:
+
+- Favor the explanation that **best matches observed stitch-out symptoms**.
+- **State both** (MCP signal vs practical override).
+- Recommend **testing the most likely real-world fix first** (often spacing, stabilizer, or machine trims before re-digitizing).
+
+Example: *MCP shows `trim_option` disabled, but tight spacing may still prevent trims even if enabled. Test spacing first.*
+
+## Ink/Stitch reminders (Step 6)
+
+Mention when relevant: hidden layers may still stitch; lettering can override trims/params; satins can lose or change params if converted; **preview vs machine** (e.g. PES trim behavior).
+
+## Avoid over-engineering (Step 7)
+
+- Do not lead with node math unless extreme or clearly the issue.
+- Do not dump long technical reports; prioritize **what fixes the stitch-out fastest**.
+
+## Mandatory response shape (Step 5 + 8)
+
+Use these sections in order. If **`MCP data unavailable`**, put it under **### ⚠️ What your tools found** and give **no** fake file-specific claims.
+
+### 🔍 What’s actually wrong
+
+Top **2–3** likely causes only; plain language.
+
+### ⚠️ What your tools found
+
+Human summary of MCP signals, or **`MCP data unavailable`** + why (if known).
+
+### 🧵 What to do RIGHT NOW
+
+**3–5** concrete actions, including **at least one** digitizing fix, **at least one** machine-setting fix, **at least one** fabric/stabilizer fix. Cover **≥2** sanity-check themes from the list above.
+
+### 🧠 Why it happened
+
+Short cause → symptom link.
+
+End every response with:
+
+**Do this first:**  
+Short **ordered** checklist the user can run immediately (tests, settings, one design change).

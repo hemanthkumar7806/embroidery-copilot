@@ -1,0 +1,139 @@
+# Fill Stitch - Ink/Stitch
+
+- **Source:** https://inkstitch.org/docs/stitches/fill-stitch/
+- **Collected:** 2026-02-20
+
+**Summary:** Fill stitch covers large areas with rows of stitches. Documents Auto-Fill (routing, row spacing, pull compensation, underlay at 90° with wider row spacing) and Legacy Fill. Key params: spacing between rows (density), underlay (angle, inset, row spacing), pull compensation, max stitch length. Underlay is on by default and recommended.
+
+---
+
+# Content from https://inkstitch.org/docs/stitches/fill-stitch/
+
+Fill Stitch - Ink/Stitch
+
+## What it is
+
+Fill stitch is used to fill big areas with a color.
+
+## Methods
+
+Ink/Stitch offers several methods to create fill stitches: Auto-Fill (this page), [Contour Fill](https://inkstitch.org/docs/stitches/contour-fill), [Cross Stitch](https://inkstitch.org/docs/stitches/cross-stitch), [Guided Fill](https://inkstitch.org/docs/stitches/guided-fill), [Meander Fill](https://inkstitch.org/docs/stitches/meander-fill), [Circular Fill](https://inkstitch.org/docs/stitches/circular-fill), [Linear Gradient Fill](https://inkstitch.org/docs/stitches/linear-gradient-fill) and Legacy Fill (this page).
+
+## Auto-Fill
+
+### How to Create
+
+To use Auto-Fill, create a closed path with a fill color. This algorithm works for complex shapes with or without holes.
+
+Info: If you are having issues with fill areas run the " [fill repair tool](https://inkstitch.org/docs/fill-tools/)" on them. This will solve most of your issues very easily.
+
+### Set Start and End Point
+
+By default, an automatic fill starts as close as possible to the previous embroidery element and ends as close as possible to the next embroidery element.
+
+To change this behavior, set start and end points for autofill objects with [Visual commands](https://inkstitch.org/docs/commands/).
+
+### Params
+
+Run`Extensions > Ink/Stitch > Params` to tweak the settings to your needs.
+
+| Settings | Description |
+| --- | --- |
+| Automatically routed fill stitching | ☑ | Must be enabled for these settings to take effect. |
+| Fill method | AutoFill | Must be set to auto fill for rows of stitches. |
+| Expand | Expand the shape before fill stitching, to compensate for gaps between shapes. |
+| Angle of lines of stitches | The angle of the rows of stitches, in degrees. 0 is horizontal, and the angle increases in a counter-clockwise direction. Negative angles are allowed. |
+| Gap Filling | Add extra rows to compensate for gaps between sections caused by distortion.Rows are always added in pairs, so this number will be rounded up to the nearest multiple of 2. |
+| Maximum fill stitch length | The length of each stitch in a row. "Max" is because a shorter stitch may be used at the start or end of a row. |
+| Spacing between rows | Distance between rows of stitches |
+| End row spacing | If set, increases or decreases the row spacing towards the end |
+| Stagger rows this many times before repeating | Stitches are staggered so that neighboring rows of stitches don't all fall in the same column (which would create a distracting valley effect). Setting this dictates the length of the cycle by which successive stitch rows are staggered. Fractional values are allowed and can have less visible diagonals than integer values. |
+| Pull compensation | Fill stitch can pull the fabric together, resulting in a shape narrower than you draw in Inkscape. This setting expands each row of stitches outward from the center of the row by a fixed length. Two values separated by a space may be used for an asymmetric effect. |
+| Pull compensation percent | Additional pull compensation which varies as a percentage of row width. Two values separated by a space may be used for an asymmetric effect. |
+| Skip last stitch in each row | The last stitch in each row is quite close to the first stitch in the next row. Skipping it decreases stitch count and density. |
+| Underpath | Must be enabled to let running stitches travel inside shape instead of around the border when moving from section to section |
+| Running stitch length | Length of stitches used when moving from section to section |
+| Running stitch tolerance | Decreasing tolerance helps the underlay to stay behind the top level. However too small a tolerance may create very short stitches. |
+| Randomize stitches | ☑ | Randomize stitch length and phase instead of dividing evenly or staggering. This is recommended for closely-spaced curved fills to avoid Moiré artefacts. |
+| Random stitch length jitter | Amount to vary the length of each stitch by when randomizing. |
+| Random Seed | Rolling the dice or setting a new value will change the random stitches |
+| Minimum stitch length | Overwrite global minimum stitch length setting. Shorter stitches than that will be removed. |
+| Minimum jump stitch length | Overwrite global minimum jump stitch length setting. Shorter distances to the next object will have no lock stitches |
+| Allow lock stitches | Enables lock stitches in only desired positions |
+| Force lock stitches | ☑ | Sew lock stitches after sewing this element, even if the distance to the next object is shorter than defined by the collapse length value in the Ink/Stitch preferences. |
+| Tack stitch | Chose your [favorite style](https://inkstitch.org/docs/stitches/lock-stitches/) |
+| Scale Tack stitch |
+| Lock stitch | Chose your [favorite style](https://inkstitch.org/docs/stitches/lock-stitches/) |
+| Scale Lock stitch |
+| Trim After | ☑ | Trim the thread after sewing this object. |
+| Stop After | ☑ | Stop the machine after sewing this object. Before stopping it will jump to the stop position (frame out) if defined. |
+
+### Underlay
+
+If stitch one layer of stitches as a fill individual stitches tend to sink into the fabric (even if it's thin) and the fill will appear sparse. The fabric may even stick up between rows.
+
+To solve this, you need underlay. This is an initial layer of stitches that hold up the final stitches. Underlay for fill stitch usually comprises of fill stitching 90 degrees offset from the final fill (called "top stitching"). The row spacing should be much wider than in the top stitching. The goal is to flatten out the fabric and give the top stitches "rails" to sit on.
+
+Underlay is enabled in Ink/Stitch by default. In some rare cases (e.g. a fill layer with big row spacing) you will want to disable it. Uncheck the checkbox "Underlay" in the AutoFill Underlay tab in your params dialogue window. Other cases will require multiple underlay. To enable, enter a space separated list of fill angles and it will result into multiple underlay layers.
+
+| Settings | Description |
+| --- | --- |
+| Underlay | Must be enabled for these settings to take effect. |
+| Fill angle | Defaults to 90 degrees angle to the top layer. It's the best value for most cases. But sometimes you might want to change your underlay directions. It is also possible to receive multiple underlays by entering a space separated list to the underlay direction |
+| Inset | Inset to cover the underlay entirely by the top layer. Negative values are possible (usefull for "knockdown" stitches). |
+| Max stitch length | Maximum stitch length. Stitches can be shortened at the start or the end of a row. |
+| Row spacing | Underlay row spacing. Defaults to 3x the spacing of the top layer. |
+| Skip last stitch in each row | The last stitch in each row is quite close to the first stitch in the next row. Skipping it decreases stitch count and density. |
+| Underpath | Must be enabled to let running stitches travel inside shape instead of around the border when moving from section to section |
+
+Before the current version, multiple fill angles had to be separated by commas, not spaces. If you are using older files, they may need [updating](https://inkstitch.org/docs/stitches/fill-stitch/docs/troubleshoot/#update-inkstitch-svg)
+
+### Sample Files Including Fill Stitches
+
+[AppliqueApplique example file](https://inkstitch.org/tutorials/applique/)
+
+[Color BlendingColor Blending Methods](https://inkstitch.org/tutorials/color-blending/)
+
+[Free Standing Lace - ButterflyFree Standing Lace - Butterfly](https://inkstitch.org/tutorials/fsl/)
+
+[FringeFringe example file](https://inkstitch.org/tutorials/fringe/)
+
+[Ink/Stitch Logo & Branding GuideInk/Stitch logo as SVG file, digitized version and branding guide.](https://inkstitch.org/tutorials/resources/inkstitch-logo/)
+
+[QR codeCreate a cross Stitch QR Code](https://inkstitch.org/tutorials/qr-code/)
+
+[Software Freedom DaySoftware Freedom Day example file](https://inkstitch.org/tutorials/software-freedom-day/)
+
+## Legacy Fill
+
+Legacy Fill is the old manual mode before automatic fill routing was implemented.
+
+In legacy fill, the extension will still break up the shape into sections, each of which can be embroidered in one go. Then these sections will be fill-stitched one at a time, jumping directly between sections.
+
+You'll almost certainly want to break your shape up into smaller shapes and connect them using [running stitches](https://inkstitch.org/docs/stitches/stroke/#running-stitch-mode). It's a painstaking process, made more so because you'll need to do it twice: once for the underlay and again for the top stitching.
+
+Run`Extensions > Ink/Stitch > Params` to alter stitch details.
+
+Some parameters will be part of an upcoming Ink/Stitch release. It is not yet integrated in Ink/Stitch.
+
+| Settings | Description |
+| --- | --- |
+| Manually routed fill stitching | Must be enabled for these settings to take effect. |
+| Fill method | Must be set to legacy fill |
+| Expand | Expand the shape before fill stitching, to compensate for gaps between shapes. |
+| Angle of lines of stitches | The angle of the rows of stitches, in degrees. 0 is horizontal, and the angle increases in a counter-clockwise direction. Negative angles are allowed. |
+| Maximum fill stitch length | The length of each stitch in a row. "Max" is because a shorter stitch may be used at the start or end of a row. |
+| Spacing between rows | Distance between rows of stitches. |
+| End row spacing | If set, increases or decreases the row spacing towards the end |
+| Stagger rows this many times before repeating | Stitches are staggered so that neighboring rows of stitches don't all fall in the same column (which would create a distracting valley effect). Setting this dictates how many rows apart the stitches will be before they fall in the same column position. |
+| Skip last stitch in each row | The last stitch in each row is quite close to the first stitch in the next row. |
+| Flip fill | The flip option can help you with routing your stitch path. When you enable flip, stitching goes from right-to-left instead of left-to-right. Using flip and rotating 180 additional degrees (by adding or subtracting 180 from angle), you can cause fill stitching for a given shape to start from any of the four possible corners. |
+| Reverse fill | Reverses fill path |
+| Minimum stitch length | Overwrite global minimum stitch length setting. Shorter stitches than that will be removed. |
+| Minimum jump stitch length | Overwrite global minimum jump stitch length setting. Shorter distances to the next object will have no lock stitches. |
+| Allow lock stitches | Enables lock stitches in only desired positions |
+| Force lock stitches | Sew lock stitches after sewing this element, even if the distance to the next object is shorter than defined by the collapse length value in the Ink/Stitch preferences. |
+| Tack stitch | Chose your [favorite style](https://inkstitch.org/docs/stitches/lock-stitches/) |
+| Lock stitch | Chose your [favorite style](https://inkstitch.org/docs/stitches/lock-stitches/) |
+| Stop After | Stop the machine after sewing this object. Before stopping it will jump to the stop position (frame out) if defined. |
+| Trim After | Trim the thread after sewing this object. |

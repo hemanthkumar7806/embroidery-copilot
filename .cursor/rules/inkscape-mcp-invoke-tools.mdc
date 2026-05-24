@@ -1,0 +1,30 @@
+---
+description: Inkscape MCP — when to call tools, mandatory execution order before advice, get_document_info + get_design_report(geometry)
+alwaysApply: true
+---
+
+# Inkscape MCP — invoke tools, do not skip them
+
+Use the Inkscape MCP ( [.cursor/mcp.json](.cursor/mcp.json) key `inkscape-ai`; Cursor may list it as **`user-inkscape-ai`** ). Read tool schemas before calling if needed.
+
+## When triggers match (document context)
+
+If the user mentions **any** of: **SVG**, **Ink/Stitch**, **embroidery file**, **design**, **lettering**, **satin**, **trims**, **analyze** a design, **current document**, **my file**, **this design**, **check** the file — and they expect help **grounded in their open Inkscape document** — you **MUST** use MCP before giving file-specific analysis or advice.
+
+**Hypothetical-only** questions (general theory with no “my design” / “this file”) do **not** require MCP.
+
+## Mandatory execution order
+
+1. **Call MCP tools first** — before analysis, conclusions, or advice tied to that document. Minimum: **`get_document_info`** (extended if useful) and **`get_design_report`** with **`include_geometry: true`**. Add **`get_canvas_screenshot`**, **`get_design_context`**, **`execute_inkscape_actions`**, **`action_list`**, **`execute_inkscape_code`** when relevant.
+2. **Do not** deliver the **final structured answer** (full diagnosis, ranked causes, “Do this first:”) **until** MCP results are back — **or** MCP has been **attempted** and failed (see [embroidery-practical-diagnosis](embroidery-practical-diagnosis.mdc)).
+3. **If MCP fails or returns no usable data:** state **`MCP data unavailable`** (brief reason if known). **Do not** stop or insist the user retry MCP before helping. Continue with [embroidery-practical-diagnosis](embroidery-practical-diagnosis.mdc). Do **not** invent file-specific facts.
+
+## Required behavior
+
+- **Do not** replace tool calls with long “you could run…” prose when the bridge can answer.
+- **Prerequisites:** Inkscape **bridge** running (e.g. `inkscape-ai-bridge` or **Extensions → Inkscape AI → Start MCP Server**) on `localhost:9877`. On connection errors, say the bridge must be running and the document path valid.
+- **Windows:** if a tool says the file was written on disk, remind to **reload the SVG** in Inkscape when needed.
+
+## After changing `.cursor/mcp.json`
+
+**Fully restart Cursor** so the MCP server loads. Install: `pip install -e inkspace-AI` from `inkspace-AI` or project root as documented.

@@ -1,0 +1,116 @@
+{
+  "elements": [
+    {
+      "id": "object9158",
+      "stitch_type": "stroke",
+      "params": {
+        "stroke_method": "manual_stitch",
+        "running_stitch_length_mm": "1.5"
+      },
+      "path_length_mm": 491.1023435,
+      "avg_segment_length_mm": 4.722137918269231,
+      "bounding_box_mm": {
+        "w": 99.89215,
+        "h": 99.89215
+      },
+      "min_dimension_mm": 99.89215,
+      "is_closed_path": false,
+      "has_open_path": true,
+      "transform_present": false,
+      "visible": false,
+      "layer_id": "layer1",
+      "layer_name": "Layer 1",
+      "style_summary": {
+        "style": "display:none;fill:none;stroke:#085aa6;stroke-width:0.107877;stroke-linecap:round;stroke-linejoin:round"
+      },
+      "path_complexity_hints": {
+        "command_count": 14
+      },
+      "node_count": 104,
+      "segment_count": 104
+    },
+    {
+      "id": "path57",
+      "stitch_type": "satin",
+      "params": {
+        "satin_column": "True",
+        "center_walk_underlay": "True"
+      },
+      "path_length_mm": 17.538042889520035,
+      "avg_segment_length_mm": 0.8769021444760018,
+      "bounding_box_mm": {
+        "w": 0.9577842199999999,
+        "h": 3.2421949999999953
+      },
+      "min_dimension_mm": 0.9577842199999999,
+      "is_closed_path": false,
+      "has_open_path": true,
+      "transform_present": false,
+      "visible": true,
+      "layer_id": "layer1",
+      "layer_name": "Layer 1",
+      "style_summary": {
+        "style": "display:inline;overflow:visible;fill:none;fill-rule:evenodd;stroke:#913697;stroke-width:0.116333"
+      },
+      "path_complexity_hints": {
+        "command_count": 8
+      },
+      "node_count": 20,
+      "segment_count": 20
+    },
+    {
+      "id": "path58",
+      "stitch_type": "satin",
+      "params": {
+        "satin_column": "True",
+        "center_walk_underlay": "True"
+      },
+      "path_length_mm": 8.082600148055315,
+      "avg_segment_length_mm": 0.3514173977415354,
+      "bounding_box_mm": {
+        "w": 1.7902359999999997,
+        "h": 0.7697360000000018
+      },
+      "min_dimension_mm": 0.7697360000000018,
+      "is_closed_path": false,
+      "has_open_path": true,
+      "transform_present": false,
+      "visible": true,
+      "layer_id": "layer1",
+      "layer_name": "Layer 1",
+      "style_summary": {
+        "style": "display:inline;overflow:visible;fill:none;fill-rule:evenodd;stroke:#913697;stroke-width:0.116333"
+      },
+      "path_complexity_hints": {
+        "command_count": 7
+      },
+      "node_count": 23,
+      "segment_count": 23
+    }
+  ],
+  "parse_warnings": [],
+  "summary": {
+    "document_path": "C:\\Users\\OFFICE\\AppData\\Local\\Temp\\ink_ext_XXXXXX.svg8RJIN3",
+    "document_name": "ink_ext_XXXXXX.svg8RJIN3",
+    "page_size_mm": {
+      "w": 210.0,
+      "h": 297.0
+    },
+    "viewBox": "0 0 210 297",
+    "element_count": 3,
+    "stitch_type_counts": {
+      "stroke": 1,
+      "satin": 2
+    },
+    "total_node_count": 147,
+    "total_segment_count": 147,
+    "total_path_length_mm": 516.7229865375754,
+    "avg_segment_length_global": 3.515122357398472,
+    "hidden_layer_count": 0,
+    "open_path_count": 3,
+    "closed_path_count": 0,
+    "transformed_element_count": 0,
+    "estimated_complexity_hint": 0.084,
+    "data_completeness_score": 1.0
+  }
+}

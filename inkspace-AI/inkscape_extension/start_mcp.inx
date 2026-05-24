@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <name>Start MCP Server</name>
+  <id>org.inkscape.ai.start_mcp</id>
+  <param name="spawn_bridge" type="boolean" gui-text="Also start the MCP bridge process">true</param>
+  <param name="live_preview" type="boolean" gui-text="Set live-preview hint env (does not auto-reload Inkscape UI)">false</param>
+  <param name="allow_temp_target" type="boolean" gui-text="Allow temp target (testing only: unsaved doc → temp_document.svg + allow writes)">false</param>
+  <effect>
+    <object-type>all</object-type>
+    <effects-menu>
+      <submenu name="Inkscape AI"/>
+    </effects-menu>
+  </effect>
+  <script>
+    <command location="inx" interpreter="python">start_mcp.py</command>
+  </script>
+</inkscape-extension>

@@ -1,0 +1,4 @@
+export const DECISION_CONFIG = {
+  HIGH_CONFIDENCE: 0.8,
+  MEDIUM_CONFIDENCE: 0.6,
+} as const;

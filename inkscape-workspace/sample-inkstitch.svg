@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkstitch="http://inkstitch.org/namespace" viewBox="0 0 100 100">
+  <path id="fill-shape" d="M 20,20 L 80,20 L 80,80 L 20,80 Z" fill="#3366cc" stroke="none"
+    inkstitch:row_spacing_mm="0.15"
+    inkstitch:fill_underlay="false"
+    inkstitch:max_stitch_length_mm="3" />
+  <path id="running-line" d="M 20,50 L 80,50" fill="none" stroke="#cc3333" stroke-width="2"
+    inkstitch:stroke_method="running_stitch"
+    inkstitch:running_stitch_length_mm="1.5" />
+</svg>
