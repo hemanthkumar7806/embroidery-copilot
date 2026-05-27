@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from lxml import etree
+from svgelements import Path as SvgPath
 
 INKSTITCH_NS = "http://inkstitch.org/namespace"
 INKSCAPE_NS = "http://www.inkscape.org/namespaces/inkscape"
@@ -144,6 +145,123 @@ def _estimated_complexity_hint(total_node_count: int, element_count: int) -> flo
     return min(float(score), 1.0)
 
 
+def _viewbox_scale_to_mm(root: etree._Element, page_mm: dict[str, float] | None) -> float:
+    if page_mm:
+        viewbox = root.get("viewBox")
+        if viewbox:
+            parts = viewbox.replace(",", " ").split()
+            if len(parts) == 4:
+                try:
+                    vb_w = float(parts[2])
+                    if vb_w > 0:
+                        return page_mm["w"] / vb_w
+                except ValueError:
+                    pass
+        return 1.0
+    return 0.264583
+
+
+def _avg_segment_length_mm(path: SvgPath, scale: float, samples: int = 200) -> float | None:
+    try:
+        length = float(path.length())
+    except (TypeError, ValueError, AttributeError):
+        return None
+    if length <= 0:
+        return None
+    if length < scale:
+        return length * scale
+    step = length / samples
+    prev = path.point(0)
+    distances: list[float] = []
+    for i in range(1, samples + 1):
+        point = path.point(min(i * step, length))
+        dx = point.x - prev.x
+        dy = point.y - prev.y
+        distances.append(((dx * dx + dy * dy) ** 0.5) * scale)
+        prev = point
+    if not distances:
+        return None
+    return sum(distances) / len(distances)
+
+
+def _path_metrics_from_d(d_attr: str, scale_mm: float) -> dict[str, Any] | None:
+    try:
+        svg_path = SvgPath(d_attr)
+        bbox = svg_path.bbox()
+        if bbox is None:
+            return None
+        if hasattr(bbox, "xmin"):
+            x_min, y_min, x_max, y_max = bbox.xmin, bbox.ymin, bbox.xmax, bbox.ymax
+        else:
+            x_min, y_min, x_max, y_max = bbox
+        width_mm = max(0.0, (x_max - x_min) * scale_mm)
+        height_mm = max(0.0, (y_max - y_min) * scale_mm)
+        path_length_mm = float(svg_path.length()) * scale_mm
+        avg_seg = _avg_segment_length_mm(svg_path, scale_mm)
+        min_dimension_mm = min(width_mm, height_mm) if width_mm > 0 and height_mm > 0 else None
+        out: dict[str, Any] = {
+            "bounding_box_mm": {"w": round(width_mm, 3), "h": round(height_mm, 3)},
+        }
+        if min_dimension_mm is not None:
+            out["min_dimension_mm"] = round(min_dimension_mm, 3)
+        if path_length_mm > 0:
+            out["path_length_mm"] = round(path_length_mm, 3)
+        if avg_seg is not None and avg_seg > 0:
+            out["avg_segment_length_mm"] = round(avg_seg, 3)
+        return out
+    except Exception:
+        return None
+
+
+def _enrich_element_geometry(
+    elements: list[dict[str, Any]],
+    scale_mm: float,
+) -> tuple[float | None, dict[str, float] | None]:
+    """Attach path geometry from svgelements; return total path length and design bbox."""
+    total_path_length = 0.0
+    path_len_known = 0
+    min_x = min_y = float("inf")
+    max_x = max_y = float("-inf")
+
+    for entry in elements:
+        if entry.get("parse_error"):
+            continue
+        d_attr = entry.get("_d_attr")
+        if not d_attr:
+            continue
+        metrics = _path_metrics_from_d(d_attr, scale_mm)
+        if not metrics:
+            continue
+        entry.update({k: v for k, v in metrics.items() if k != "_d_attr"})
+        bbox = metrics.get("bounding_box_mm") or {}
+        if metrics.get("path_length_mm"):
+            total_path_length += float(metrics["path_length_mm"])
+            path_len_known += 1
+        if bbox:
+            min_x = min(min_x, 0.0)
+            max_x = max(max_x, float(bbox.get("w", 0)))
+
+    total_path_mm = total_path_length if path_len_known > 0 else None
+    design_bbox = None
+    if path_len_known > 0:
+        widths = [
+            float(e["bounding_box_mm"]["w"])
+            for e in elements
+            if e.get("bounding_box_mm")
+        ]
+        heights = [
+            float(e["bounding_box_mm"]["h"])
+            for e in elements
+            if e.get("bounding_box_mm")
+        ]
+        if widths and heights:
+            design_bbox = {
+                "w": round(max(widths), 3),
+                "h": round(max(heights), 3),
+            }
+    return total_path_mm, design_bbox
+
+
 def empty_design_report() -> dict[str, Any]:
     """Placeholder report when the user has not uploaded an SVG yet."""
     return {
@@ -163,6 +281,12 @@ def empty_design_report() -> dict[str, Any]:
             "estimated_complexity_hint": "no_design_uploaded",
         },
         "parse_warnings": [],
+        "session_context": {
+            "fabric_type": None,
+            "garment_type": None,
+            "symptom": None,
+            "hoop_size_mm": None,
+        },
     }
 
 
@@ -234,6 +358,7 @@ def build_design_report(svg_bytes: bytes, document_name: str = "upload.svg", inc
                     entry["segment_count"] = geom[1]
                     total_node += geom[0]
                     total_seg += geom[1]
+                entry["_d_attr"] = d_attr
 
             stitch_type_counts[stitch_type] = stitch_type_counts.get(stitch_type, 0) + 1
             if entry["transform_present"]:
@@ -244,6 +369,11 @@ def build_design_report(svg_bytes: bytes, document_name: str = "upload.svg", inc
             elements.append({"id": elem_id, "parse_error": str(exc)})
 
     element_count = len([e for e in elements if "parse_error" not in e])
+    scale_mm = _viewbox_scale_to_mm(root, page_mm)
+    total_path_mm, design_bbox = _enrich_element_geometry(elements, scale_mm)
+    for entry in elements:
+        entry.pop("_d_attr", None)
+
     summary = {
         "document_name": Path(document_name).name,
         "page_size_mm": page_mm,
@@ -252,6 +382,8 @@ def build_design_report(svg_bytes: bytes, document_name: str = "upload.svg", inc
         "stitch_type_counts": stitch_type_counts,
         "total_node_count": total_node if include_geometry else None,
         "total_segment_count": total_seg if include_geometry else None,
+        "total_path_length_mm": total_path_mm,
+        "design_bounding_box_mm": design_bbox,
         "hidden_layer_count": hidden_layer_count,
         "open_path_count": open_path_count,
         "closed_path_count": closed_path_count,
@@ -263,6 +395,12 @@ def build_design_report(svg_bytes: bytes, document_name: str = "upload.svg", inc
         "elements": elements,
         "summary": summary,
         "parse_warnings": parse_warnings,
+        "session_context": {
+            "fabric_type": None,
+            "garment_type": None,
+            "symptom": None,
+            "hoop_size_mm": None,
+        },
     }
 
 

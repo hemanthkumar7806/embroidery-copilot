@@ -76,6 +76,16 @@ class DatabaseService:
                 db.add(row)
                 db.commit()
 
+    def update_design_report(self, session_id: str, design_report_json: str) -> None:
+        with DBSession(self.engine) as db:
+            row = db.get(Session, session_id)
+            if not row:
+                return
+            row.design_report_json = design_report_json
+            row.last_active_at = datetime.now(UTC)
+            db.add(row)
+            db.commit()
+
     def get_messages(self, session_id: str) -> list[Message]:
         with DBSession(self.engine) as db:
             stmt = select(Message).where(Message.session_id == session_id).order_by(Message.created_at)

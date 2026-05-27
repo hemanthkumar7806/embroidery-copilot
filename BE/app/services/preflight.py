@@ -12,6 +12,7 @@ from app.core.prompts import load_preflight_prompt
 from app.services.llm import llm_service
 from app.services.offline_fallback import build_offline_preflight
 from app.services.rag import rag_service
+from app.services.rule_engine import run as run_rule_engine
 
 
 def _message_content(response_content: Any) -> str:
@@ -39,20 +40,25 @@ def _build_retrieval_query(design_report: dict[str, Any]) -> str:
     return " ".join(str(p) for p in parts if p)
 
 
-async def generate_preflight(design_report: dict[str, Any]) -> tuple[str, list[dict[str, Any]]]:
+async def generate_preflight(
+    design_report: dict[str, Any],
+) -> tuple[str, list[dict[str, Any]], dict[str, Any]]:
+    rules_result = run_rule_engine(design_report)
     query = _build_retrieval_query(design_report)
     rag = await rag_service.retrieve(query)
     chunks = rag.chunks
     if not settings.has_llm:
-        return build_offline_preflight(design_report), chunks
+        return build_offline_preflight(design_report), chunks, rules_result
     context = rag_service.format_context(chunks)
     system_prompt = load_preflight_prompt()
     human_payload = (
         "Generate the initial preflight report for this uploaded design.\n\n"
         f"Design report JSON:\n{json.dumps(design_report, indent=2)}\n\n"
+        "Rule engine findings (authoritative — cite these issue IDs and verdict):\n"
+        f"{json.dumps(rules_result, indent=2)}\n\n"
         f"Retrieved documentation:\n{context}"
     )
     response = await llm_service.invoke(
         [SystemMessage(content=system_prompt), HumanMessage(content=human_payload)]
     )
-    return _message_content(response.content), chunks
+    return _message_content(response.content), chunks, rules_result
