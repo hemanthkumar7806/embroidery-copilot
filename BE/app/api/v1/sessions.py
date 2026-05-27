@@ -22,9 +22,19 @@ from app.schemas.sessions import (
 from app.services.chat_service import generate_chat_reply
 from app.services.database import database_service
 from app.services.preflight import generate_preflight
-from app.services.svg_parser import build_design_report, design_report_to_json
+from app.services.svg_parser import (
+    build_design_report,
+    design_report_to_json,
+    empty_design_report,
+)
 
 router = APIRouter()
+
+CHAT_ONLY_WELCOME = (
+    "Hi — ask me about Ink/Stitch embroidery, trims, satins, stabilizer, lettering, or machine setup. "
+    "Upload an SVG on the left anytime for a design-specific preflight report."
+)
+EMPTY_SVG = b'<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>'
 
 
 def _load_sources(raw: str | None) -> list[Source]:
@@ -41,6 +51,28 @@ def _load_sources(raw: str | None) -> list[Source]:
 
 def _preflight_from_message(content: str, sources_raw: str | None) -> PreflightReport:
     return PreflightReport(content=content, sources=_load_sources(sources_raw))
+
+
+@router.post("/chat", response_model=CreateSessionResponse)
+async def create_chat_session() -> CreateSessionResponse:
+    """Start a general embroidery Q&A session without uploading an SVG."""
+    session_id = str(uuid.uuid4())
+    svg_path = settings.DATA_DIR / "svgs" / f"{session_id}.svg"
+    svg_path.write_bytes(EMPTY_SVG)
+
+    design_report = empty_design_report()
+    design_report_json = design_report_to_json(design_report)
+    preflight = PreflightReport(content=CHAT_ONLY_WELCOME, sources=[])
+
+    database_service.create_session(
+        session_id=session_id,
+        svg_path=str(svg_path),
+        design_report_json=design_report_json,
+        preflight_json="[]",
+        preflight_content=CHAT_ONLY_WELCOME,
+    )
+    logger.info("chat_session_created", session_id=session_id)
+    return CreateSessionResponse(session_id=session_id, preflight=preflight)
 
 
 @router.post("", response_model=CreateSessionResponse)
@@ -115,14 +147,22 @@ async def chat_session(session_id: str, body: ChatRequest) -> ChatResponse:
     database_service.add_message(session_id, "user", body.message)
 
     try:
-        reply, chunks = await generate_chat_reply(design_report, history, body.message)
+        reply, chunks, rag_status, rag_detail = await generate_chat_reply(
+            design_report, history, body.message
+        )
     except Exception as exc:
         logger.exception("chat_generation_failed", session_id=session_id, error=str(exc))
         raise HTTPException(status_code=502, detail="Failed to generate chat response.") from exc
 
     sources = sources_from_chunks(chunks)
     database_service.add_message(session_id, "assistant", reply, sources_to_json(sources))
-    return ChatResponse(content=reply, sources=sources)
+    return ChatResponse(
+        content=reply,
+        sources=sources,
+        rag_status=rag_status,
+        rag_chunk_count=len(chunks),
+        rag_detail=rag_detail or None,
+    )
 
 
 @router.get("/{session_id}/svg")

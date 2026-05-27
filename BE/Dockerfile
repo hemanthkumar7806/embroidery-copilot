@@ -15,7 +15,7 @@ COPY pyproject.toml .
 RUN uv venv && . .venv/bin/activate && uv pip install -e .
 
 COPY . .
-RUN mkdir -p /app/data/svgs /app/data/chroma
+RUN mkdir -p /app/data/svgs
 
 EXPOSE 8000
 CMD ["/app/.venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

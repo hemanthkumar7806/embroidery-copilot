@@ -15,13 +15,13 @@ copy .env.example .env
 
 Edit `.env`:
 
-- Set `OPENAI_API_KEY` (needed for embeddings and default chat model)
-- Or set `LLM_PROVIDER=anthropic` and `ANTHROPIC_API_KEY`
+- Set `GEMINI_API_KEY` (or another provider) for chat
+- Set `LLAMA_CLOUD_API_KEY` and `LLAMA_CLOUD_PIPELINE_ID` for RAG
 
-## 3. Index docs (once)
+## 3. Test RAG (optional)
 
 ```powershell
-uv run python scripts/index_corpus.py
+uv run python scripts/test_llamacloud_rag.py "satin trim spacing"
 ```
 
 ## 4. Run

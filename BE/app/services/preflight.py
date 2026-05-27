@@ -41,7 +41,8 @@ def _build_retrieval_query(design_report: dict[str, Any]) -> str:
 
 async def generate_preflight(design_report: dict[str, Any]) -> tuple[str, list[dict[str, Any]]]:
     query = _build_retrieval_query(design_report)
-    chunks = rag_service.retrieve(query)
+    rag = await rag_service.retrieve(query)
+    chunks = rag.chunks
     if not settings.has_llm:
         return build_offline_preflight(design_report), chunks
     context = rag_service.format_context(chunks)

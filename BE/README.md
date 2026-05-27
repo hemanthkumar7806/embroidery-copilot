@@ -5,7 +5,7 @@ Minimal anonymous FastAPI backend for short SVG design reviews.
 ## Features
 
 - Upload an SVG and get an immediate preflight report
-- Follow-up chat grounded in design data and docs RAG
+- Follow-up chat grounded in design data and LlamaCloud RAG
 - Anonymous UUID sessions (no login)
 - SQLite storage with 7-day auto cleanup
 
@@ -14,10 +14,10 @@ Minimal anonymous FastAPI backend for short SVG design reviews.
 ```powershell
 cd BE
 copy .env.example .env
-# Set OPENAI_API_KEY (embeddings + default LLM) or ANTHROPIC_API_KEY with LLM_PROVIDER=anthropic
+# Set GEMINI_API_KEY (or other LLM provider) and LlamaCloud RAG vars (see below)
 
 uv sync
-uv run python scripts/index_corpus.py
+uv run python scripts/test_llamacloud_rag.py "satin trim spacing"
 uv run python -m uvicorn app.main:app --reload --port 8000
 ```
 
@@ -31,24 +31,28 @@ Open http://localhost:8000/docs
 | GET | `/api/v1/sessions/{id}` | Session detail + chat history |
 | POST | `/api/v1/sessions/{id}/chat` | Send a follow-up message |
 | DELETE | `/api/v1/sessions/{id}` | Delete session |
-| GET | `/health` | Health check |
+| GET | `/health` | Health check (includes `rag` component status) |
 
 ## Environment
 
 See [.env.example](.env.example). Key variables:
 
-- `LLM_PROVIDER` — `openai`, `anthropic`, or `groq`
-- `OPENAI_API_KEY` — required for RAG embeddings; also used when provider is openai
-- `ANTHROPIC_API_KEY` — when `LLM_PROVIDER=anthropic`
-- `DATA_DIR` — defaults to `./data` (SQLite, Chroma, uploaded SVGs)
-- `DOCS_DIR` — defaults to `../docs`
+- `LLM_PROVIDER` — `openai`, `gemini`, `anthropic`, or `groq`
+- `GEMINI_API_KEY` / `OPENAI_API_KEY` / etc. — for chat generation
+- `LLAMA_CLOUD_API_KEY` — from [LlamaCloud](https://cloud.llamaindex.ai/) → Settings → API Keys
+- `LLAMA_CLOUD_PIPELINE_ID` — your index/pipeline ID from the LlamaCloud dashboard
+- `LLAMA_CLOUD_RETRIEVAL_TOP_K` — chunks per query (default `8`)
+- `LLAMA_CLOUD_ENABLE_RERANKING` — `true`/`false` (default `true`)
+- `DATA_DIR` — defaults to `./data` (SQLite, uploaded SVGs)
 - `SESSION_TTL_DAYS` — defaults to `7`
+
+Documents are indexed in LlamaCloud (not locally). Ensure indexing is complete in the dashboard before testing RAG.
 
 ## Makefile
 
 ```bash
-make dev           # run locally with reload
-make index-corpus  # rebuild Chroma index from docs/
+make dev       # run locally with reload
+make test-rag  # test LlamaCloud retrieval (optional query arg)
 make lint
 ```
 
@@ -57,7 +61,6 @@ make lint
 ```
 data/
   app.db          # SQLite sessions
-  chroma/         # vector index
   svgs/           # uploaded SVG files
 ```
 

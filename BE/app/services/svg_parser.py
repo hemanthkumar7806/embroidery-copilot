@@ -144,6 +144,28 @@ def _estimated_complexity_hint(total_node_count: int, element_count: int) -> flo
     return min(float(score), 1.0)
 
 
+def empty_design_report() -> dict[str, Any]:
+    """Placeholder report when the user has not uploaded an SVG yet."""
+    return {
+        "elements": [],
+        "summary": {
+            "document_name": None,
+            "page_size_mm": None,
+            "viewBox": None,
+            "element_count": 0,
+            "stitch_type_counts": {},
+            "total_node_count": 0,
+            "total_segment_count": 0,
+            "hidden_layer_count": 0,
+            "open_path_count": 0,
+            "closed_path_count": 0,
+            "transformed_element_count": 0,
+            "estimated_complexity_hint": "no_design_uploaded",
+        },
+        "parse_warnings": [],
+    }
+
+
 def build_design_report(svg_bytes: bytes, document_name: str = "upload.svg", include_geometry: bool = True) -> dict[str, Any]:
     """Parse SVG bytes and return an Ink/Stitch-oriented design report."""
     parser = etree.XMLParser(recover=True, huge_tree=False)

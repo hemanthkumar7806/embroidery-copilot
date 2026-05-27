@@ -18,6 +18,12 @@ def _parse_list(value: str | None, default: list[str]) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+def _parse_bool(value: str | None, default: bool) -> bool:
+    if value is None:
+        return default
+    return value.strip().lower() in ("true", "1", "yes")
+
+
 class Settings:
     """Application settings loaded from environment variables."""
 
@@ -42,7 +48,14 @@ class Settings:
     DEFAULT_LLM_TEMPERATURE: float = float(os.getenv("DEFAULT_LLM_TEMPERATURE", "0.2"))
     MAX_TOKENS: int = int(os.getenv("MAX_TOKENS", "4096"))
     MAX_LLM_CALL_RETRIES: int = int(os.getenv("MAX_LLM_CALL_RETRIES", "3"))
-    EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
+
+    LLAMA_CLOUD_API_KEY: str = os.getenv("LLAMA_CLOUD_API_KEY", "")
+    LLAMA_CLOUD_PIPELINE_ID: str = os.getenv("LLAMA_CLOUD_PIPELINE_ID", "")
+    LLAMA_CLOUD_PROJECT_ID: str = os.getenv("LLAMA_CLOUD_PROJECT_ID", "")
+    LLAMA_CLOUD_RETRIEVAL_TOP_K: int = int(os.getenv("LLAMA_CLOUD_RETRIEVAL_TOP_K", "8"))
+    LLAMA_CLOUD_ENABLE_RERANKING: bool = _parse_bool(
+        os.getenv("LLAMA_CLOUD_ENABLE_RERANKING"), True
+    )
 
     DATA_DIR: Path = Path(os.getenv("DATA_DIR", "./data"))
     DOCS_DIR: Path = Path(os.getenv("DOCS_DIR", str(_BE_ROOT.parent / "docs")))
@@ -51,8 +64,6 @@ class Settings:
 
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "DEBUG" if DEBUG else "INFO")
     LOG_FORMAT: str = os.getenv("LOG_FORMAT", "console")
-
-    CHROMA_COLLECTION: str = "embroidery_docs"
 
     def __init__(self) -> None:
         if not self.DEFAULT_LLM_MODEL:
@@ -66,15 +77,10 @@ class Settings:
 
         self.DATA_DIR.mkdir(parents=True, exist_ok=True)
         (self.DATA_DIR / "svgs").mkdir(parents=True, exist_ok=True)
-        (self.DATA_DIR / "chroma").mkdir(parents=True, exist_ok=True)
 
     @property
     def sqlite_path(self) -> Path:
         return self.DATA_DIR / "app.db"
-
-    @property
-    def chroma_path(self) -> Path:
-        return self.DATA_DIR / "chroma"
 
     @property
     def has_llm(self) -> bool:
@@ -87,8 +93,19 @@ class Settings:
         return bool(self.OPENAI_API_KEY)
 
     @property
-    def has_embeddings(self) -> bool:
-        return bool(self.OPENAI_API_KEY)
+    def has_rag(self) -> bool:
+        return bool(
+            self.LLAMA_CLOUD_API_KEY
+            and self.LLAMA_CLOUD_PIPELINE_ID
+            and not self.rag_pipeline_misconfigured
+        )
+
+    @property
+    def rag_pipeline_misconfigured(self) -> bool:
+        """Project ID was mistakenly used as pipeline ID."""
+        if not self.LLAMA_CLOUD_PIPELINE_ID or not self.LLAMA_CLOUD_PROJECT_ID:
+            return False
+        return self.LLAMA_CLOUD_PIPELINE_ID.strip() == self.LLAMA_CLOUD_PROJECT_ID.strip()
 
 
 settings = Settings()

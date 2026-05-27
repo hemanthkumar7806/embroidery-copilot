@@ -16,6 +16,7 @@ from app.core.logging import logger
 from app.core.middleware import LoggingContextMiddleware
 from app.services.cleanup import start_cleanup_scheduler
 from app.services.database import database_service
+from app.services.rag import rag_service
 
 _scheduler = None
 
@@ -73,10 +74,17 @@ _STATIC_INDEX = _STATIC_DIR / "index.html"
 @app.get("/health")
 async def health_check() -> dict[str, Any]:
     db_ok = database_service.health_check()
+    cfg_status, cfg_detail = rag_service.config_status()
+    rag_component = "ready" if cfg_status == "ok" and settings.has_rag else cfg_status
     payload = {
         "status": "healthy" if db_ok else "degraded",
         "version": settings.VERSION,
-        "components": {"api": "healthy", "database": "healthy" if db_ok else "unhealthy"},
+        "components": {
+            "api": "healthy",
+            "database": "healthy" if db_ok else "unhealthy",
+            "rag": rag_component,
+        },
+        "rag_detail": cfg_detail or None,
         "timestamp": datetime.now().isoformat(),
     }
     code = status.HTTP_200_OK if db_ok else status.HTTP_503_SERVICE_UNAVAILABLE
