@@ -26,10 +26,15 @@ import sys
 import tempfile
 import time
 import uuid
+import warnings
 import webbrowser
 from io import BytesIO
 from pathlib import Path
 from urllib import error, request
+
+# Inkscape surfaces anything on the extension's stderr as a popup dialog, so keep
+# it clean (e.g. the benign "subprocess still running" ResourceWarning at exit).
+warnings.filterwarnings("ignore", category=ResourceWarning)
 
 try:  # inkex only exists when Inkscape launches us; the worker does not need it.
     import inkex
@@ -329,8 +334,12 @@ def _spawn_worker(svg_bytes: bytes, filename: str, doc_path: Path | None, base_u
     else:
         kwargs["start_new_session"] = True
 
-    subprocess.Popen(args, **kwargs)  # noqa: S603 - trusted, self-invocation
-    _log(f"worker spawned pid-detached tmp={tmp.name}")
+    proc = subprocess.Popen(args, **kwargs)  # noqa: S603 - trusted, self-invocation
+    # Fire-and-forget: the worker is fully detached and outlives us on purpose.
+    # Mark it reaped so CPython's Popen.__del__ does not emit a ResourceWarning
+    # at interpreter shutdown (Inkscape would surface that on stderr as a dialog).
+    proc.returncode = 0
+    _log(f"worker spawned pid={proc.pid} detached tmp={tmp.name}")
 
 
 def _worker_main(argv: list[str]) -> None:
