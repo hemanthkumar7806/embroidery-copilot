@@ -28,6 +28,9 @@ class RuleIssueOut(BaseModel):
     source: str
     confidence: float | None = None
     group: str | None = None
+    element_ids: list[str] = Field(default_factory=list)
+    focus_bbox: dict[str, float] | None = None
+    evidence: dict[str, Any] | None = None
 
 
 class RuleDecisionOut(BaseModel):
@@ -134,6 +137,9 @@ def rule_engine_from_dict(payload: dict[str, Any] | None) -> RuleEngineOut | Non
             source=issue.get("source", ""),
             confidence=issue.get("confidence"),
             group=issue.get("group"),
+            element_ids=list(issue.get("element_ids") or []),
+            focus_bbox=issue.get("focus_bbox"),
+            evidence=issue.get("evidence"),
         )
         for issue in payload.get("issues") or []
     ]
@@ -148,6 +154,9 @@ def rule_engine_from_dict(payload: dict[str, Any] | None) -> RuleEngineOut | Non
             source=issue.get("source", ""),
             confidence=issue.get("confidence"),
             group=issue.get("group"),
+            element_ids=list(issue.get("element_ids") or []),
+            focus_bbox=issue.get("focus_bbox"),
+            evidence=issue.get("evidence"),
         )
         for issue in payload.get("context_gaps") or []
     ]

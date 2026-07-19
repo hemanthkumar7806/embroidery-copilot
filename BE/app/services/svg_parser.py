@@ -194,12 +194,20 @@ def _path_metrics_from_d(d_attr: str, scale_mm: float) -> dict[str, Any] | None:
             x_min, y_min, x_max, y_max = bbox.xmin, bbox.ymin, bbox.xmax, bbox.ymax
         else:
             x_min, y_min, x_max, y_max = bbox
-        width_mm = max(0.0, (x_max - x_min) * scale_mm)
-        height_mm = max(0.0, (y_max - y_min) * scale_mm)
+        width = max(0.0, x_max - x_min)
+        height = max(0.0, y_max - y_min)
+        width_mm = width * scale_mm
+        height_mm = height * scale_mm
         path_length_mm = float(svg_path.length()) * scale_mm
         avg_seg = _avg_segment_length_mm(svg_path, scale_mm)
         min_dimension_mm = min(width_mm, height_mm) if width_mm > 0 and height_mm > 0 else None
         out: dict[str, Any] = {
+            "bounding_box": {
+                "x": round(x_min, 3),
+                "y": round(y_min, 3),
+                "w": round(width, 3),
+                "h": round(height, 3),
+            },
             "bounding_box_mm": {"w": round(width_mm, 3), "h": round(height_mm, 3)},
         }
         if min_dimension_mm is not None:
@@ -233,32 +241,27 @@ def _enrich_element_geometry(
         if not metrics:
             continue
         entry.update({k: v for k, v in metrics.items() if k != "_d_attr"})
-        bbox = metrics.get("bounding_box_mm") or {}
+        bbox = metrics.get("bounding_box") or {}
         if metrics.get("path_length_mm"):
             total_path_length += float(metrics["path_length_mm"])
             path_len_known += 1
         if bbox:
-            min_x = min(min_x, 0.0)
-            max_x = max(max_x, float(bbox.get("w", 0)))
+            bx = float(bbox.get("x", 0))
+            by = float(bbox.get("y", 0))
+            bw = float(bbox.get("w", 0))
+            bh = float(bbox.get("h", 0))
+            min_x = min(min_x, bx)
+            min_y = min(min_y, by)
+            max_x = max(max_x, bx + bw)
+            max_y = max(max_y, by + bh)
 
     total_path_mm = total_path_length if path_len_known > 0 else None
     design_bbox = None
-    if path_len_known > 0:
-        widths = [
-            float(e["bounding_box_mm"]["w"])
-            for e in elements
-            if e.get("bounding_box_mm")
-        ]
-        heights = [
-            float(e["bounding_box_mm"]["h"])
-            for e in elements
-            if e.get("bounding_box_mm")
-        ]
-        if widths and heights:
-            design_bbox = {
-                "w": round(max(widths), 3),
-                "h": round(max(heights), 3),
-            }
+    if path_len_known > 0 and min_x != float("inf"):
+        design_bbox = {
+            "w": round(max_x - min_x, 3),
+            "h": round(max_y - min_y, 3),
+        }
     return total_path_mm, design_bbox
 
 

@@ -18,5 +18,11 @@ def test_build_design_report_computes_path_geometry():
     assert element.get("path_length_mm") is not None
     assert element.get("min_dimension_mm") is not None
     assert element["min_dimension_mm"] > 50
+    bbox = element.get("bounding_box")
+    assert bbox is not None
+    assert bbox["x"] == 10
+    assert bbox["y"] == 10
+    assert bbox["w"] == 80
+    assert bbox["h"] == 80
     assert report["summary"].get("total_path_length_mm") is not None
     assert report["summary"].get("design_bounding_box_mm") is not None

@@ -22,6 +22,7 @@ from app.schemas.sessions import (
 )
 from app.services.chat_service import generate_chat_reply
 from app.services.database import database_service
+from app.services.issue_element_mapper import enrich_rule_engine_payload
 from app.services.rule_engine import run as run_rule_engine
 from app.services.svg_parser import (
     build_design_report,
@@ -49,6 +50,11 @@ def _load_sources(raw: str | None) -> list[Source]:
 
 def _preflight_from_message(content: str, sources_raw: str | None) -> PreflightReport:
     return PreflightReport(content=content, sources=_load_sources(sources_raw))
+
+
+def _build_rules_payload(design_report: dict) -> dict:
+    rules_payload = run_rule_engine(design_report)
+    return enrich_rule_engine_payload(design_report, rules_payload)
 
 
 @router.post("/chat", response_model=CreateSessionResponse)
@@ -88,7 +94,7 @@ async def create_session(svg_file: UploadFile = File(...)) -> CreateSessionRespo
     svg_path.write_bytes(raw)
 
     design_report = build_design_report(raw, document_name=svg_file.filename)
-    rules_payload = run_rule_engine(design_report)
+    rules_payload = _build_rules_payload(design_report)
     design_report["cached_rule_engine"] = rules_payload
     design_report_json = design_report_to_json(design_report)
 
@@ -162,6 +168,41 @@ async def chat_session(session_id: str, body: ChatRequest) -> ChatResponse:
         rag_detail=rag_detail or None,
         rule_engine=rule_engine_from_dict(rules_payload),
     )
+
+
+@router.post("/{session_id}/svg", response_model=CreateSessionResponse)
+async def upload_session_svg(session_id: str, svg_file: UploadFile = File(...)) -> CreateSessionResponse:
+    """Upload or replace SVG on an existing session; append welcome message, keep chat history."""
+    row = database_service.get_session(session_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Session not found or expired.")
+
+    if not svg_file.filename or not svg_file.filename.lower().endswith(".svg"):
+        raise HTTPException(status_code=400, detail="Upload must be an .svg file.")
+
+    raw = await svg_file.read()
+    if len(raw) > settings.MAX_SVG_BYTES:
+        raise HTTPException(status_code=413, detail=f"SVG exceeds {settings.MAX_SVG_BYTES} bytes.")
+
+    svg_path = settings.DATA_DIR / "svgs" / f"{session_id}.svg"
+    svg_path.write_bytes(raw)
+
+    design_report = build_design_report(raw, document_name=svg_file.filename)
+    rules_payload = _build_rules_payload(design_report)
+    design_report["cached_rule_engine"] = rules_payload
+    design_report_json = design_report_to_json(design_report)
+
+    welcome_content = build_welcome_message(design_report, rules_payload)
+    preflight = PreflightReport(
+        content=welcome_content,
+        sources=[],
+        rule_engine=rule_engine_from_dict(rules_payload),
+    )
+
+    database_service.update_design_report(session_id, design_report_json)
+    database_service.add_message(session_id, "assistant", welcome_content, "[]")
+    logger.info("session_svg_uploaded", session_id=session_id, filename=svg_file.filename)
+    return CreateSessionResponse(session_id=session_id, preflight=preflight)
 
 
 @router.get("/{session_id}/svg")

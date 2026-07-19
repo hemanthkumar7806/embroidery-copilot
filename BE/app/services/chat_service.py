@@ -20,6 +20,7 @@ from app.services.context_extractor import (
 from app.services.llm import llm_service
 from app.services.offline_fallback import build_offline_chat_reply
 from app.services.rag import rag_service
+from app.services.issue_element_mapper import enrich_rule_engine_payload
 from app.services.rule_engine import run as run_rule_engine
 
 
@@ -66,6 +67,9 @@ async def generate_chat_reply(
     apply_context_to_report(design_report, accumulated)
     has_design = has_design_uploaded(design_report)
     rules_result = run_rule_engine(design_report) if has_design else _chat_only_rules_payload()
+    if has_design:
+        rules_result = enrich_rule_engine_payload(design_report, rules_result)
+        design_report["cached_rule_engine"] = rules_result
 
     rag = await rag_service.retrieve(user_message)
     chunks = rag.chunks
