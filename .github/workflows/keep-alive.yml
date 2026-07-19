@@ -1,0 +1,27 @@
+# Ping the free Render service so it sleeps less often during beta testing.
+# Runs every 10 minutes. Costs nothing on GitHub Actions free tier.
+name: Keep Render awake
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit /health
+        run: |
+          set -e
+          for i in 1 2 3; do
+            if curl -fsS --max-time 90 "https://embroidery-ext.onrender.com/health"; then
+              echo
+              echo "OK (attempt $i)"
+              exit 0
+            fi
+            echo "Attempt $i failed; retrying..."
+            sleep 15
+          done
+          echo "Health check failed after retries"
+          exit 1

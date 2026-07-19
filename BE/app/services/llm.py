@@ -1,6 +1,10 @@
-"""Slim LLM service with retries for the beta backend."""
+"""Slim LLM service with retries for the beta backend.
 
-from typing import List
+LLM clients are created lazily on first chat call so cold starts can serve
+/health (and SVG upload) without waiting on Gemini/OpenAI SDK init.
+"""
+
+from typing import List, Optional
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -50,14 +54,23 @@ class LLMRegistry:
 
 
 class LLMService:
-    """Single-model LLM caller with retry logic."""
+    """Single-model LLM caller; initializes the client on first use."""
 
     def __init__(self) -> None:
-        self._llm = LLMRegistry.get()
-        logger.info("llm_service_initialized", model=settings.DEFAULT_LLM_MODEL, provider=settings.LLM_PROVIDER)
+        self._llm: Optional[BaseChatModel] = None
+
+    def _ensure_llm(self) -> BaseChatModel:
+        if self._llm is None:
+            self._llm = LLMRegistry.get()
+            logger.info(
+                "llm_service_initialized",
+                model=settings.DEFAULT_LLM_MODEL,
+                provider=settings.LLM_PROVIDER,
+            )
+        return self._llm
 
     async def invoke(self, messages: List[BaseMessage]) -> BaseMessage:
-        return await self._llm.ainvoke(messages)
+        return await self._ensure_llm().ainvoke(messages)
 
 
 llm_service = LLMService()

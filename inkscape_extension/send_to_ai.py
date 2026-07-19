@@ -1,15 +1,22 @@
 #!/usr/bin/env python3
 """Inkscape extension: upload the current SVG and open the chat UI in the browser.
 
-One click — no settings dialog. Defaults to http://localhost:8000.
-Optional override: INKSCAPE_AI_BASE_URL environment variable (advanced/hosted).
+One click — no settings dialog. Defaults to hosted Render URL.
+Optional override: INKSCAPE_AI_BASE_URL environment variable (advanced/local).
+
+Free hosts sleep when idle. Best practice here:
+1. Probe /health
+2. If asleep, open the site in the browser (wakes it) and poll until ready
+3. Upload with retries so a slow first response does not strand the user
 """
 
 from __future__ import annotations
 
 import json
 import os
+import socket
 import ssl
+import time
 import uuid
 import webbrowser
 from io import BytesIO
@@ -19,8 +26,10 @@ from urllib import error, request
 import inkex
 
 DEFAULT_URL = "https://embroidery-ext.onrender.com"
-UPLOAD_TIMEOUT_S = 60
-HEALTH_TIMEOUT_S = 60
+PROBE_TIMEOUT_S = 10
+UPLOAD_TIMEOUT_S = 120
+WAKE_POLL_S = 5
+UPLOAD_RETRIES = 3
 SIDECAR_SUFFIX = ".inkscape-ai.json"
 
 
@@ -49,6 +58,16 @@ _SSL_CONTEXT = _ssl_context()
 def _base_url() -> str:
     env = os.environ.get("INKSCAPE_AI_BASE_URL", "").strip()
     return (env or DEFAULT_URL).rstrip("/")
+
+
+def _is_timeout(exc: BaseException) -> bool:
+    if isinstance(exc, (TimeoutError, socket.timeout)):
+        return True
+    reason = getattr(exc, "reason", None)
+    if isinstance(reason, (TimeoutError, socket.timeout)):
+        return True
+    text = str(exc).lower()
+    return "timed out" in text or "timeout" in text
 
 
 def _sidecar_path(doc_path: Path) -> Path:
@@ -115,55 +134,112 @@ def _parse_session_id(payload: dict) -> str:
     return str(session_id)
 
 
-def _request_json(req: request.Request) -> dict:
+def _urlopen(req: request.Request, timeout: float):
+    return request.urlopen(req, timeout=timeout, context=_SSL_CONTEXT)
+
+
+def _probe_health(base_url: str, timeout: float = PROBE_TIMEOUT_S) -> bool:
+    req = request.Request(f"{base_url}/health", method="GET")
     try:
-        with request.urlopen(req, timeout=UPLOAD_TIMEOUT_S, context=_SSL_CONTEXT) as resp:
+        with _urlopen(req, timeout) as resp:
+            return resp.status == 200
+    except Exception:
+        return False
+
+
+def _open_browser(url: str) -> None:
+    try:
+        webbrowser.open(url, new=2)
+    except Exception:
+        pass
+
+
+def _ensure_backend_awake(base_url: str) -> None:
+    """Ensure backend answers /health without freezing Inkscape for a full minute.
+
+    If the free host is asleep: open the site in the browser (starts wake) and
+    ask the user to click again once the page loads. A long in-process wait
+    makes Inkscape look frozen.
+    """
+    if _probe_health(base_url):
+        return
+
+    _open_browser(base_url)
+    # Brief second chance — sometimes the host is mid-wake.
+    time.sleep(WAKE_POLL_S)
+    if _probe_health(base_url):
+        return
+
+    raise RuntimeError(
+        "Server is waking up (free hosting sleeps when idle).\n\n"
+        "A browser tab was opened to wake it.\n"
+        "1. Wait until that page loads (can take 30–60 seconds)\n"
+        "2. Click Extensions → Inkscape AI → Send to AI Assistant again\n\n"
+        f"URL: {base_url}"
+    )
+
+
+def _request_json_once(req: request.Request) -> dict:
+    try:
+        with _urlopen(req, UPLOAD_TIMEOUT_S) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="ignore")[:300]
         raise RuntimeError(f"Backend rejected upload ({exc.code}): {detail}") from exc
-    except error.URLError as exc:
-        raise RuntimeError(
-            f"Could not reach backend: {exc.reason}.\n"
-            "Start the backend: uv run python -m uvicorn app.main:app --port 8000"
-        ) from exc
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"Backend returned non-JSON response: {exc}") from exc
+    except Exception as exc:
+        if _is_timeout(exc):
+            raise RuntimeError("timeout") from exc
+        if isinstance(exc, error.URLError):
+            raise RuntimeError(f"url_error:{exc.reason}") from exc
+        if isinstance(exc, json.JSONDecodeError):
+            raise RuntimeError(f"Backend returned non-JSON response: {exc}") from exc
+        raise
 
 
-def _check_health(base_url: str) -> None:
-    req = request.Request(f"{base_url}/health", method="GET")
-    try:
-        with request.urlopen(req, timeout=HEALTH_TIMEOUT_S, context=_SSL_CONTEXT) as resp:
-            if resp.status != 200:
-                raise RuntimeError(f"Backend health check failed ({resp.status}).")
-    except error.URLError as exc:
-        raise RuntimeError(
-            f"Backend is not reachable at {base_url}: {exc.reason}.\n"
-            "Start the backend: uv run python -m uvicorn app.main:app --port 8000"
-        ) from exc
+def _post_session_json(url: str, filename: str, data: bytes) -> dict:
+    """POST multipart with rebuild+retry (free hosts drop the first request sometimes)."""
+    last_msg = ""
+    for attempt in range(1, UPLOAD_RETRIES + 1):
+        body, content_type = _encode_multipart(filename, data)
+        req = request.Request(
+            url,
+            data=body,
+            headers={"Content-Type": content_type, "Accept": "application/json"},
+            method="POST",
+        )
+        try:
+            return _request_json_once(req)
+        except RuntimeError as exc:
+            last_msg = str(exc)
+            retryable = last_msg == "timeout" or last_msg.startswith("url_error:")
+            if retryable and attempt < UPLOAD_RETRIES:
+                time.sleep(3 * attempt)
+                continue
+            if last_msg == "timeout":
+                raise RuntimeError(
+                    "Upload timed out after retries.\n\n"
+                    f"Open {_base_url()} in your browser, wait until it loads,\n"
+                    "then click Send to AI Assistant again."
+                ) from exc
+            if last_msg.startswith("url_error:"):
+                raise RuntimeError(
+                    f"Could not reach backend: {last_msg.split(':', 1)[1]}.\n"
+                    f"URL: {_base_url()}"
+                ) from exc
+            raise
+    raise RuntimeError(f"Upload failed: {last_msg}")
 
 
 def _create_session(base_url: str, filename: str, data: bytes) -> str:
-    body, content_type = _encode_multipart(filename, data)
-    req = request.Request(
-        f"{base_url}/api/v1/sessions",
-        data=body,
-        headers={"Content-Type": content_type, "Accept": "application/json"},
-        method="POST",
+    return _parse_session_id(
+        _post_session_json(f"{base_url}/api/v1/sessions", filename, data)
     )
-    return _parse_session_id(_request_json(req))
 
 
 def _update_session(base_url: str, session_id: str, filename: str, data: bytes) -> str:
-    body, content_type = _encode_multipart(filename, data)
-    req = request.Request(
-        f"{base_url}/api/v1/sessions/{session_id}/svg",
-        data=body,
-        headers={"Content-Type": content_type, "Accept": "application/json"},
-        method="POST",
+    _parse_session_id(
+        _post_session_json(f"{base_url}/api/v1/sessions/{session_id}/svg", filename, data)
     )
-    _parse_session_id(_request_json(req))
     return session_id
 
 
@@ -200,12 +276,19 @@ class SendToAI(inkex.EffectExtension):
             return
 
         try:
-            _check_health(base_url)
+            _ensure_backend_awake(base_url)
             session_id = _upload_or_create_session(base_url, filename, svg_bytes, doc_path)
         except RuntimeError as exc:
             inkex.errormsg(str(exc))
             return
         except Exception as exc:
+            if _is_timeout(exc):
+                inkex.errormsg(
+                    "Timed out contacting the server.\n\n"
+                    f"Open {base_url} in your browser, wait for the page,\n"
+                    "then click Send to AI Assistant again."
+                )
+                return
             inkex.errormsg(f"Unexpected error: {exc}")
             return
 
