@@ -4,10 +4,15 @@
 One click — no settings dialog. Defaults to hosted Render URL.
 Optional override: INKSCAPE_AI_BASE_URL environment variable (advanced/local).
 
-Free hosts sleep when idle. Best practice here:
-1. Probe /health
-2. If asleep, open the site in the browser (wakes it) and poll until ready
-3. Upload with retries so a slow first response does not strand the user
+Architecture (why it never freezes Inkscape):
+Inkscape runs extensions synchronously and BLOCKS its whole UI until the script
+returns. So the extension must do almost nothing in-process. It grabs the SVG,
+writes it to a temp file, launches a fully DETACHED background worker, and
+returns immediately. Inkscape unfreezes instantly. The worker (a second copy of
+this file run with --worker, stdout/stderr silenced) does all the slow work:
+wait for the free host to wake, upload, and open the browser. Because the worker
+is detached with no stdout, Inkscape never shows the "script returned data"
+dialog either.
 """
 
 from __future__ import annotations
@@ -16,22 +21,30 @@ import json
 import os
 import socket
 import ssl
+import subprocess
+import sys
 import tempfile
 import time
-import traceback
 import uuid
 import webbrowser
 from io import BytesIO
 from pathlib import Path
 from urllib import error, request
 
-import inkex
+try:  # inkex only exists when Inkscape launches us; the worker does not need it.
+    import inkex
+
+    _HAVE_INKEX = True
+except Exception:  # pragma: no cover - worker process path
+    inkex = None  # type: ignore[assignment]
+    _HAVE_INKEX = False
 
 DEFAULT_URL = "https://embroidery-ext.onrender.com"
 PROBE_TIMEOUT_S = 12
 UPLOAD_TIMEOUT_S = 90
-WAKE_POLL_S = 6
-WAKE_POLL_ATTEMPTS = 3
+# Worker runs in the background, so it can afford to wait for a cold free host.
+WAKE_POLL_S = 5
+WAKE_POLL_ATTEMPTS = 24  # ~2 min of patient polling, no UI impact
 UPLOAD_RETRIES = 3
 SIDECAR_SUFFIX = ".inkscape-ai.json"
 
@@ -115,7 +128,7 @@ def _write_sidecar(path: Path, session_id: str) -> None:
         pass
 
 
-def _resolve_document_bytes(ext: inkex.EffectExtension) -> tuple[bytes, str, Path | None]:
+def _resolve_document_bytes(ext) -> tuple[bytes, str, Path | None]:
     """Return (svg_bytes, filename, saved_doc_path_or_none)."""
     doc_path = os.environ.get("DOCUMENT_PATH", "").strip()
     if doc_path:
@@ -178,29 +191,21 @@ def _open_browser(url: str) -> None:
         _log(f"browser open FAILED: {exc!r}")
 
 
-def _ensure_backend_awake(base_url: str) -> None:
-    """Wait (quietly) until /health responds, then let the caller upload.
+def _wait_until_awake(base_url: str) -> bool:
+    """Poll /health until the free host is up. Returns True if awake.
 
-    We do NOT open the browser here: on free single-worker hosting, the page's
-    own requests compete with the upload and can stall it. We just poll health
-    a few times; if still asleep, tell the user to retry (no browser noise).
+    Runs in the detached worker, so waiting here never freezes Inkscape.
     """
     if _probe_health(base_url):
-        return
-
-    _log("server appears asleep; polling health")
-    for _ in range(WAKE_POLL_ATTEMPTS):
+        return True
+    _log("server appears asleep; polling health in background")
+    for attempt in range(WAKE_POLL_ATTEMPTS):
         time.sleep(WAKE_POLL_S)
         if _probe_health(base_url):
-            _log("server woke during poll")
-            return
-
-    raise RuntimeError(
-        "Server is waking up (free hosting sleeps when idle).\n\n"
-        "Wait ~30 seconds, then click\n"
-        "Extensions → Inkscape AI → Send to AI Assistant again.\n\n"
-        f"URL: {base_url}"
-    )
+            _log(f"server woke during poll (attempt {attempt + 1})")
+            return True
+    _log("server did not wake within poll window")
+    return False
 
 
 def _request_json_once(req: request.Request) -> dict:
@@ -294,52 +299,108 @@ def _upload_or_create_session(
     return session_id
 
 
-class SendToAI(inkex.EffectExtension):
-    def effect(self) -> None:
-        base_url = _base_url()
-        _log("=" * 50)
-        _log(f"effect() start base_url={base_url} debug_log={LOG_PATH}")
+def _spawn_worker(svg_bytes: bytes, filename: str, doc_path: Path | None, base_url: str) -> None:
+    """Write the SVG to a temp file and launch a detached worker; return at once.
 
-        try:
-            svg_bytes, filename, doc_path = _resolve_document_bytes(self)
-            _log(f"resolved svg: filename={filename} bytes={len(svg_bytes)} doc_path={doc_path}")
-        except Exception as exc:
-            _log(f"resolve_document_bytes FAILED: {exc!r}")
-            inkex.errormsg(f"Send to AI Assistant: {exc}")
+    This is the whole point: no network here, so Inkscape unfreezes immediately.
+    """
+    tmp = Path(tempfile.gettempdir()) / f"inkscape_ai_{uuid.uuid4().hex}.svg"
+    tmp.write_bytes(svg_bytes)
+
+    args = [
+        sys.executable,
+        os.path.abspath(__file__),
+        "--worker",
+        str(tmp),
+        filename,
+        str(doc_path) if doc_path is not None else "-",
+        base_url,
+    ]
+
+    kwargs: dict = {
+        "stdin": subprocess.DEVNULL,
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+        "close_fds": True,
+    }
+    if os.name == "nt":
+        # DETACHED_PROCESS | CREATE_NO_WINDOW: fully independent, no console popup.
+        kwargs["creationflags"] = 0x00000008 | 0x08000000
+    else:
+        kwargs["start_new_session"] = True
+
+    subprocess.Popen(args, **kwargs)  # noqa: S603 - trusted, self-invocation
+    _log(f"worker spawned pid-detached tmp={tmp.name}")
+
+
+def _worker_main(argv: list[str]) -> None:
+    """Detached background process: wait for host, upload, open browser."""
+    tmp_path = Path(argv[0])
+    filename = argv[1]
+    doc_arg = argv[2]
+    base_url = (argv[3] if len(argv) > 3 and argv[3] else _base_url()).rstrip("/")
+    doc_path = None if doc_arg in ("", "-") else Path(doc_arg)
+
+    _log("=" * 50)
+    _log(f"worker start base_url={base_url} tmp={tmp_path} doc_path={doc_path}")
+
+    try:
+        svg_bytes = tmp_path.read_bytes()
+    except Exception as exc:
+        _log(f"worker could not read temp svg: {exc!r}")
+        return
+
+    try:
+        awake = _wait_until_awake(base_url)
+        if not awake:
+            # Give the user something: open the site so it wakes for a retry.
+            _open_browser(base_url)
+            _log("worker: host asleep, opened base_url as fallback")
             return
 
+        session_id = _upload_or_create_session(base_url, filename, svg_bytes, doc_path)
+        _log(f"worker: session ready {session_id}")
+        _open_browser(f"{base_url}/?s={session_id}&from=inkscape")
+    except Exception as exc:  # noqa: BLE001 - detached; log and fall back
+        _log(f"worker upload failed: {exc!r}")
+        _open_browser(base_url)  # at least land the user on the site
+    finally:
         try:
-            _ensure_backend_awake(base_url)
-            session_id = _upload_or_create_session(base_url, filename, svg_bytes, doc_path)
-            _log(f"session ready: {session_id}")
-        except RuntimeError as exc:
-            _log(f"upload flow RuntimeError: {exc}")
-            inkex.errormsg(str(exc))
-            return
-        except Exception as exc:
-            _log(f"upload flow EXCEPTION: {exc!r}\n{traceback.format_exc()}")
-            if _is_timeout(exc):
-                inkex.errormsg(
-                    "Timed out contacting the server.\n\n"
-                    f"Open {base_url} in your browser, wait for the page,\n"
-                    "then click Send to AI Assistant again."
-                )
-                return
-            inkex.errormsg(f"Unexpected error: {exc}")
-            return
+            tmp_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        _log("worker done")
 
-        url = f"{base_url}/?s={session_id}&from=inkscape"
-        try:
-            webbrowser.open(url, new=2)
-            _log(f"final browser open: {url}")
-        except Exception as exc:
-            _log(f"final browser open FAILED: {exc!r}")
-            inkex.errormsg(
-                "Upload succeeded but the browser could not be opened.\n\n"
-                f"Visit:\n{url}"
-            )
-        _log("effect() done")
+
+if _HAVE_INKEX:
+
+    class SendToAI(inkex.EffectExtension):  # type: ignore[misc]
+        """Thin, non-blocking launcher. Does no network; spawns the worker."""
+
+        def effect(self) -> None:
+            base_url = _base_url()
+            _log("=" * 50)
+            _log(f"effect() start base_url={base_url} debug_log={LOG_PATH}")
+            try:
+                svg_bytes, filename, doc_path = _resolve_document_bytes(self)
+                _log(f"resolved svg: filename={filename} bytes={len(svg_bytes)} doc_path={doc_path}")
+                _spawn_worker(svg_bytes, filename, doc_path, base_url)
+            except Exception as exc:  # noqa: BLE001
+                _log(f"effect() FAILED: {exc!r}")
+                inkex.errormsg(f"Send to AI Assistant could not start: {exc}")
+            # Return immediately either way — never block Inkscape's UI.
+
+
+def main() -> None:
+    if len(sys.argv) > 1 and sys.argv[1] == "--worker":
+        _worker_main(sys.argv[2:])
+        return
+    if _HAVE_INKEX:
+        SendToAI().run()
+    else:  # pragma: no cover
+        sys.stderr.write("This script must be run inside Inkscape (inkex missing).\n")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
-    SendToAI().run()
+    main()
