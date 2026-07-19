@@ -16,7 +16,9 @@ import json
 import os
 import socket
 import ssl
+import tempfile
 import time
+import traceback
 import uuid
 import webbrowser
 from io import BytesIO
@@ -31,6 +33,22 @@ UPLOAD_TIMEOUT_S = 120
 WAKE_POLL_S = 5
 UPLOAD_RETRIES = 3
 SIDECAR_SUFFIX = ".inkscape-ai.json"
+
+# Debug logging: on by default during beta. Disable with INKSCAPE_AI_DEBUG=0.
+DEBUG = os.environ.get("INKSCAPE_AI_DEBUG", "1").strip() not in ("0", "false", "no", "")
+LOG_PATH = Path(
+    os.environ.get("INKSCAPE_AI_LOG", str(Path(tempfile.gettempdir()) / "inkscape_ai_debug.log"))
+)
+
+
+def _log(msg: str) -> None:
+    if not DEBUG:
+        return
+    try:
+        with LOG_PATH.open("a", encoding="utf-8") as fh:
+            fh.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {msg}\n")
+    except Exception:
+        pass
 
 
 def _ssl_context() -> ssl.SSLContext:
@@ -140,18 +158,23 @@ def _urlopen(req: request.Request, timeout: float):
 
 def _probe_health(base_url: str, timeout: float = PROBE_TIMEOUT_S) -> bool:
     req = request.Request(f"{base_url}/health", method="GET")
+    started = time.time()
     try:
         with _urlopen(req, timeout) as resp:
-            return resp.status == 200
-    except Exception:
+            ok = resp.status == 200
+            _log(f"health probe -> {resp.status} in {time.time() - started:.1f}s")
+            return ok
+    except Exception as exc:
+        _log(f"health probe FAILED in {time.time() - started:.1f}s: {exc!r}")
         return False
 
 
 def _open_browser(url: str) -> None:
     try:
         webbrowser.open(url, new=2)
-    except Exception:
-        pass
+        _log(f"browser opened: {url}")
+    except Exception as exc:
+        _log(f"browser open FAILED: {exc!r}")
 
 
 def _ensure_backend_awake(base_url: str) -> None:
@@ -207,10 +230,15 @@ def _post_session_json(url: str, filename: str, data: bytes) -> dict:
             headers={"Content-Type": content_type, "Accept": "application/json"},
             method="POST",
         )
+        _log(f"POST {url} attempt {attempt}/{UPLOAD_RETRIES} ({len(data)} bytes)")
+        started = time.time()
         try:
-            return _request_json_once(req)
+            result = _request_json_once(req)
+            _log(f"POST ok in {time.time() - started:.1f}s -> session {result.get('session_id')}")
+            return result
         except RuntimeError as exc:
             last_msg = str(exc)
+            _log(f"POST attempt {attempt} failed in {time.time() - started:.1f}s: {last_msg}")
             retryable = last_msg == "timeout" or last_msg.startswith("url_error:")
             if retryable and attempt < UPLOAD_RETRIES:
                 time.sleep(3 * attempt)
@@ -268,20 +296,27 @@ def _upload_or_create_session(
 class SendToAI(inkex.EffectExtension):
     def effect(self) -> None:
         base_url = _base_url()
+        _log("=" * 50)
+        _log(f"effect() start base_url={base_url} debug_log={LOG_PATH}")
 
         try:
             svg_bytes, filename, doc_path = _resolve_document_bytes(self)
+            _log(f"resolved svg: filename={filename} bytes={len(svg_bytes)} doc_path={doc_path}")
         except Exception as exc:
+            _log(f"resolve_document_bytes FAILED: {exc!r}")
             inkex.errormsg(f"Send to AI Assistant: {exc}")
             return
 
         try:
             _ensure_backend_awake(base_url)
             session_id = _upload_or_create_session(base_url, filename, svg_bytes, doc_path)
+            _log(f"session ready: {session_id}")
         except RuntimeError as exc:
+            _log(f"upload flow RuntimeError: {exc}")
             inkex.errormsg(str(exc))
             return
         except Exception as exc:
+            _log(f"upload flow EXCEPTION: {exc!r}\n{traceback.format_exc()}")
             if _is_timeout(exc):
                 inkex.errormsg(
                     "Timed out contacting the server.\n\n"
@@ -295,11 +330,14 @@ class SendToAI(inkex.EffectExtension):
         url = f"{base_url}/?s={session_id}&from=inkscape"
         try:
             webbrowser.open(url, new=2)
-        except Exception:
+            _log(f"final browser open: {url}")
+        except Exception as exc:
+            _log(f"final browser open FAILED: {exc!r}")
             inkex.errormsg(
                 "Upload succeeded but the browser could not be opened.\n\n"
                 f"Visit:\n{url}"
             )
+        _log("effect() done")
 
 
 if __name__ == "__main__":
