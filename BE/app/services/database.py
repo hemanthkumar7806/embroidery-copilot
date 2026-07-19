@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
+from sqlalchemy import event
 from sqlmodel import Session as DBSession
 from sqlmodel import SQLModel, create_engine, select
 
@@ -17,7 +18,22 @@ class DatabaseService:
 
     def __init__(self) -> None:
         db_url = f"sqlite:///{settings.sqlite_path.as_posix()}"
-        self.engine = create_engine(db_url, connect_args={"check_same_thread": False})
+        # timeout => SQLite busy timeout so concurrent writers wait instead of erroring.
+        self.engine = create_engine(
+            db_url,
+            connect_args={"check_same_thread": False, "timeout": 30},
+        )
+
+        @event.listens_for(self.engine, "connect")
+        def _set_sqlite_pragma(dbapi_conn, _record) -> None:  # noqa: ANN001
+            # WAL lets reads and writes happen concurrently (single Render worker,
+            # browser + extension hitting the DB at once).
+            cur = dbapi_conn.cursor()
+            cur.execute("PRAGMA journal_mode=WAL")
+            cur.execute("PRAGMA synchronous=NORMAL")
+            cur.execute("PRAGMA busy_timeout=30000")
+            cur.close()
+
         SQLModel.metadata.create_all(self.engine)
         logger.info("database_initialized", path=str(settings.sqlite_path))
 

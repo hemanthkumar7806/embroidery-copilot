@@ -28,9 +28,10 @@ from urllib import error, request
 import inkex
 
 DEFAULT_URL = "https://embroidery-ext.onrender.com"
-PROBE_TIMEOUT_S = 10
-UPLOAD_TIMEOUT_S = 120
-WAKE_POLL_S = 5
+PROBE_TIMEOUT_S = 12
+UPLOAD_TIMEOUT_S = 90
+WAKE_POLL_S = 6
+WAKE_POLL_ATTEMPTS = 3
 UPLOAD_RETRIES = 3
 SIDECAR_SUFFIX = ".inkscape-ai.json"
 
@@ -178,26 +179,26 @@ def _open_browser(url: str) -> None:
 
 
 def _ensure_backend_awake(base_url: str) -> None:
-    """Ensure backend answers /health without freezing Inkscape for a full minute.
+    """Wait (quietly) until /health responds, then let the caller upload.
 
-    If the free host is asleep: open the site in the browser (starts wake) and
-    ask the user to click again once the page loads. A long in-process wait
-    makes Inkscape look frozen.
+    We do NOT open the browser here: on free single-worker hosting, the page's
+    own requests compete with the upload and can stall it. We just poll health
+    a few times; if still asleep, tell the user to retry (no browser noise).
     """
     if _probe_health(base_url):
         return
 
-    _open_browser(base_url)
-    # Brief second chance — sometimes the host is mid-wake.
-    time.sleep(WAKE_POLL_S)
-    if _probe_health(base_url):
-        return
+    _log("server appears asleep; polling health")
+    for _ in range(WAKE_POLL_ATTEMPTS):
+        time.sleep(WAKE_POLL_S)
+        if _probe_health(base_url):
+            _log("server woke during poll")
+            return
 
     raise RuntimeError(
         "Server is waking up (free hosting sleeps when idle).\n\n"
-        "A browser tab was opened to wake it.\n"
-        "1. Wait until that page loads (can take 30–60 seconds)\n"
-        "2. Click Extensions → Inkscape AI → Send to AI Assistant again\n\n"
+        "Wait ~30 seconds, then click\n"
+        "Extensions → Inkscape AI → Send to AI Assistant again.\n\n"
         f"URL: {base_url}"
     )
 

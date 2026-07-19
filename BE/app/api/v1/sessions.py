@@ -5,6 +5,7 @@ import uuid
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
 from app.core.logging import logger
@@ -57,6 +58,20 @@ def _build_rules_payload(design_report: dict) -> dict:
     return enrich_rule_engine_payload(design_report, rules_payload)
 
 
+def _process_svg(raw: bytes, filename: str) -> tuple[dict, dict, str, str]:
+    """CPU-bound SVG parse + rule engine + welcome. Run in a threadpool.
+
+    These are synchronous and heavy; running them off the event loop keeps the
+    single Render worker responsive when the browser and extension hit at once.
+    """
+    design_report = build_design_report(raw, document_name=filename)
+    rules_payload = _build_rules_payload(design_report)
+    design_report["cached_rule_engine"] = rules_payload
+    design_report_json = design_report_to_json(design_report)
+    welcome_content = build_welcome_message(design_report, rules_payload)
+    return design_report, rules_payload, design_report_json, welcome_content
+
+
 @router.post("/chat", response_model=CreateSessionResponse)
 async def create_chat_session() -> CreateSessionResponse:
     """Start a general embroidery Q&A session without uploading an SVG."""
@@ -91,26 +106,25 @@ async def create_session(svg_file: UploadFile = File(...)) -> CreateSessionRespo
 
     session_id = str(uuid.uuid4())
     svg_path = settings.DATA_DIR / "svgs" / f"{session_id}.svg"
-    svg_path.write_bytes(raw)
+    await run_in_threadpool(svg_path.write_bytes, raw)
 
-    design_report = build_design_report(raw, document_name=svg_file.filename)
-    rules_payload = _build_rules_payload(design_report)
-    design_report["cached_rule_engine"] = rules_payload
-    design_report_json = design_report_to_json(design_report)
+    design_report, rules_payload, design_report_json, welcome_content = await run_in_threadpool(
+        _process_svg, raw, svg_file.filename
+    )
 
-    welcome_content = build_welcome_message(design_report, rules_payload)
     preflight = PreflightReport(
         content=welcome_content,
         sources=[],
         rule_engine=rule_engine_from_dict(rules_payload),
     )
 
-    database_service.create_session(
-        session_id=session_id,
-        svg_path=str(svg_path),
-        design_report_json=design_report_json,
-        preflight_json="[]",
-        preflight_content=welcome_content,
+    await run_in_threadpool(
+        database_service.create_session,
+        session_id,
+        str(svg_path),
+        design_report_json,
+        "[]",
+        welcome_content,
     )
     logger.info("session_created", session_id=session_id)
     return CreateSessionResponse(session_id=session_id, preflight=preflight)
@@ -185,22 +199,22 @@ async def upload_session_svg(session_id: str, svg_file: UploadFile = File(...)) 
         raise HTTPException(status_code=413, detail=f"SVG exceeds {settings.MAX_SVG_BYTES} bytes.")
 
     svg_path = settings.DATA_DIR / "svgs" / f"{session_id}.svg"
-    svg_path.write_bytes(raw)
+    await run_in_threadpool(svg_path.write_bytes, raw)
 
-    design_report = build_design_report(raw, document_name=svg_file.filename)
-    rules_payload = _build_rules_payload(design_report)
-    design_report["cached_rule_engine"] = rules_payload
-    design_report_json = design_report_to_json(design_report)
+    _design_report, rules_payload, design_report_json, welcome_content = await run_in_threadpool(
+        _process_svg, raw, svg_file.filename
+    )
 
-    welcome_content = build_welcome_message(design_report, rules_payload)
     preflight = PreflightReport(
         content=welcome_content,
         sources=[],
         rule_engine=rule_engine_from_dict(rules_payload),
     )
 
-    database_service.update_design_report(session_id, design_report_json)
-    database_service.add_message(session_id, "assistant", welcome_content, "[]")
+    await run_in_threadpool(database_service.update_design_report, session_id, design_report_json)
+    await run_in_threadpool(
+        database_service.add_message, session_id, "assistant", welcome_content, "[]"
+    )
     logger.info("session_svg_uploaded", session_id=session_id, filename=svg_file.filename)
     return CreateSessionResponse(session_id=session_id, preflight=preflight)
 
