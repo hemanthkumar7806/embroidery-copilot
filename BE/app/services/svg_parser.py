@@ -26,6 +26,80 @@ def _local_tag(tag: str) -> str:
     return tag.split("}")[-1] if "}" in tag else tag
 
 
+GEOMETRY_TAGS = {"path", "circle", "ellipse", "rect", "line", "polyline", "polygon"}
+_NON_DRAWABLE_ANCESTORS = {"defs", "clipPath", "mask", "symbol", "marker", "pattern"}
+
+
+def _num(node: etree._Element, attr: str, default: float = 0.0) -> float:
+    raw = node.get(attr)
+    if raw is None:
+        return default
+    match = re.match(r"^\s*(-?[\d.]+)", raw)
+    try:
+        return float(match.group(1)) if match else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _shape_to_d(node: etree._Element) -> str | None:
+    """Return a path 'd' string for a path or basic SVG shape (Ink/Stitch treats these as stitchable)."""
+    tag = _local_tag(node.tag)
+    if tag == "path":
+        return node.get("d") or None
+    if tag == "circle":
+        cx, cy, r = _num(node, "cx"), _num(node, "cy"), _num(node, "r")
+        if r <= 0:
+            return None
+        return f"M {cx - r},{cy} a {r},{r} 0 1,0 {2 * r},0 a {r},{r} 0 1,0 {-2 * r},0 Z"
+    if tag == "ellipse":
+        cx, cy, rx, ry = _num(node, "cx"), _num(node, "cy"), _num(node, "rx"), _num(node, "ry")
+        if rx <= 0 or ry <= 0:
+            return None
+        return f"M {cx - rx},{cy} a {rx},{ry} 0 1,0 {2 * rx},0 a {rx},{ry} 0 1,0 {-2 * rx},0 Z"
+    if tag == "rect":
+        x, y, w, h = _num(node, "x"), _num(node, "y"), _num(node, "width"), _num(node, "height")
+        if w <= 0 or h <= 0:
+            return None
+        return f"M {x},{y} h {w} v {h} h {-w} Z"
+    if tag == "line":
+        x1, y1, x2, y2 = _num(node, "x1"), _num(node, "y1"), _num(node, "x2"), _num(node, "y2")
+        return f"M {x1},{y1} L {x2},{y2}"
+    if tag in ("polyline", "polygon"):
+        points = (node.get("points") or "").strip()
+        if not points:
+            return None
+        d = f"M {points}"
+        if tag == "polygon":
+            d += " Z"
+        return d
+    return None
+
+
+def _in_non_drawable(node: etree._Element) -> bool:
+    parent = node.getparent()
+    while parent is not None:
+        if _local_tag(parent.tag) in _NON_DRAWABLE_ANCESTORS:
+            return True
+        parent = parent.getparent()
+    return False
+
+
+def _paint_info(node: etree._Element) -> tuple[bool, bool]:
+    """Return (has_fill, has_stroke). SVG default fill is black when unspecified."""
+    style_map: dict[str, str] = {}
+    for part in (node.get("style") or "").split(";"):
+        if ":" in part:
+            key, value = part.split(":", 1)
+            style_map[key.strip().lower()] = value.strip().lower()
+
+    fill = style_map.get("fill", (node.get("fill") or "").strip().lower())
+    stroke = style_map.get("stroke", (node.get("stroke") or "").strip().lower())
+
+    has_fill = fill != "none"  # unspecified ("") defaults to black => still a fill
+    has_stroke = stroke not in ("", "none")
+    return has_fill, has_stroke
+
+
 def _path_geometry_from_d(d: str) -> tuple[int, int] | None:
     if not d or not d.strip():
         return None
@@ -318,8 +392,19 @@ def build_design_report(svg_bytes: bytes, document_name: str = "upload.svg", inc
             for key, value in node.attrib.items()
             if key.startswith(ns_prefix)
         }
+
+        implicit_paint: tuple[bool, bool] | None = None
         if not inkstitch_attrs:
-            continue
+            # No explicit Ink/Stitch params: still count plain drawable shapes,
+            # because Ink/Stitch stitches any visible filled/stroked object.
+            if _local_tag(node.tag) not in GEOMETRY_TAGS:
+                continue
+            if not _is_visible(node) or _in_non_drawable(node):
+                continue
+            has_fill, has_stroke = _paint_info(node)
+            if not (has_fill or has_stroke):
+                continue
+            implicit_paint = (has_fill, has_stroke)
 
         elem_id = node.get("id") or ""
         if not elem_id:
@@ -331,8 +416,12 @@ def build_design_report(svg_bytes: bytes, document_name: str = "upload.svg", inc
         seen_ids.add(elem_id)
 
         try:
-            stitch_type = _infer_stitch_type(node, inkstitch_attrs)
-            d_attr = node.get("d", "")
+            if implicit_paint is not None:
+                has_fill, has_stroke = implicit_paint
+                stitch_type = "fill" if has_fill else "stroke"
+            else:
+                stitch_type = _infer_stitch_type(node, inkstitch_attrs)
+            d_attr = _shape_to_d(node) or ""
             is_closed = None
             if d_attr:
                 is_closed = "z" in d_attr.lower()
