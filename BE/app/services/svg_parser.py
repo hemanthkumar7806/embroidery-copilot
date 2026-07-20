@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import math
 import re
 from pathlib import Path
 from typing import Any
@@ -235,30 +236,94 @@ def _viewbox_scale_to_mm(root: etree._Element, page_mm: dict[str, float] | None)
     return 0.264583
 
 
-def _avg_segment_length_mm(path: SvgPath, scale: float, samples: int = 200) -> float | None:
+def _avg_segment_length_mm(
+    path_length_mm: float,
+    segment_count: int | None,
+) -> float | None:
+    """Cheap average segment length — avoids svgelements point() sampling (very slow on arcs)."""
+    if path_length_mm <= 0:
+        return None
+    n = segment_count if segment_count and segment_count > 0 else 1
+    return path_length_mm / n
+
+
+def _fast_path_length(svg_path: SvgPath) -> float:
+    """Path length with a loose tolerance.
+
+    svgelements' default length() on arc commands can take ~45s per path (Inkscape
+    ellipses/circles converted to 'a' arcs). error=1.0 is accurate enough for
+    embroidery heuristics and finishes in a few milliseconds.
+    """
     try:
-        length = float(path.length())
-    except (TypeError, ValueError, AttributeError):
-        return None
-    if length <= 0:
-        return None
-    if length < scale:
-        return length * scale
-    step = length / samples
-    prev = path.point(0)
-    distances: list[float] = []
-    for i in range(1, samples + 1):
-        point = path.point(min(i * step, length))
-        dx = point.x - prev.x
-        dy = point.y - prev.y
-        distances.append(((dx * dx + dy * dy) ** 0.5) * scale)
-        prev = point
-    if not distances:
-        return None
-    return sum(distances) / len(distances)
+        return float(svg_path.length(error=1.0, min_depth=1))
+    except TypeError:
+        # Older svgelements without min_depth
+        return float(svg_path.length(error=1.0))
 
 
-def _path_metrics_from_d(d_attr: str, scale_mm: float) -> dict[str, Any] | None:
+def _metrics_from_bbox_and_length(
+    x_min: float,
+    y_min: float,
+    width: float,
+    height: float,
+    path_length: float,
+    scale_mm: float,
+    segment_count: int | None = None,
+) -> dict[str, Any]:
+    width_mm = width * scale_mm
+    height_mm = height * scale_mm
+    path_length_mm = path_length * scale_mm
+    min_dimension_mm = min(width_mm, height_mm) if width_mm > 0 and height_mm > 0 else None
+    avg_seg = _avg_segment_length_mm(path_length_mm, segment_count)
+    out: dict[str, Any] = {
+        "bounding_box": {
+            "x": round(x_min, 3),
+            "y": round(y_min, 3),
+            "w": round(width, 3),
+            "h": round(height, 3),
+        },
+        "bounding_box_mm": {"w": round(width_mm, 3), "h": round(height_mm, 3)},
+    }
+    if min_dimension_mm is not None:
+        out["min_dimension_mm"] = round(min_dimension_mm, 3)
+    if path_length_mm > 0:
+        out["path_length_mm"] = round(path_length_mm, 3)
+    if avg_seg is not None and avg_seg > 0:
+        out["avg_segment_length_mm"] = round(avg_seg, 3)
+    return out
+
+
+def _analytical_shape_metrics(node: etree._Element, scale_mm: float) -> dict[str, Any] | None:
+    """O(1) geometry for basic shapes — never call svgelements on arcs."""
+    tag = _local_tag(node.tag)
+    if tag == "circle":
+        cx, cy, r = _num(node, "cx"), _num(node, "cy"), _num(node, "r")
+        if r <= 0:
+            return None
+        return _metrics_from_bbox_and_length(
+            cx - r, cy - r, 2 * r, 2 * r, 2 * math.pi * r, scale_mm, segment_count=4
+        )
+    if tag == "ellipse":
+        cx, cy, rx, ry = _num(node, "cx"), _num(node, "cy"), _num(node, "rx"), _num(node, "ry")
+        if rx <= 0 or ry <= 0:
+            return None
+        # Ramanujan approximation for ellipse perimeter
+        h = ((rx - ry) ** 2) / ((rx + ry) ** 2) if (rx + ry) else 0.0
+        peri = math.pi * (rx + ry) * (1 + (3 * h) / (10 + math.sqrt(max(0.0, 4 - 3 * h))))
+        return _metrics_from_bbox_and_length(
+            cx - rx, cy - ry, 2 * rx, 2 * ry, peri, scale_mm, segment_count=4
+        )
+    if tag == "rect":
+        x, y, w, h = _num(node, "x"), _num(node, "y"), _num(node, "width"), _num(node, "height")
+        if w <= 0 or h <= 0:
+            return None
+        return _metrics_from_bbox_and_length(x, y, w, h, 2 * (w + h), scale_mm, segment_count=4)
+    return None
+
+
+def _path_metrics_from_d(
+    d_attr: str, scale_mm: float, segment_count: int | None = None
+) -> dict[str, Any] | None:
     try:
         svg_path = SvgPath(d_attr)
         bbox = svg_path.bbox()
@@ -270,27 +335,10 @@ def _path_metrics_from_d(d_attr: str, scale_mm: float) -> dict[str, Any] | None:
             x_min, y_min, x_max, y_max = bbox
         width = max(0.0, x_max - x_min)
         height = max(0.0, y_max - y_min)
-        width_mm = width * scale_mm
-        height_mm = height * scale_mm
-        path_length_mm = float(svg_path.length()) * scale_mm
-        avg_seg = _avg_segment_length_mm(svg_path, scale_mm)
-        min_dimension_mm = min(width_mm, height_mm) if width_mm > 0 and height_mm > 0 else None
-        out: dict[str, Any] = {
-            "bounding_box": {
-                "x": round(x_min, 3),
-                "y": round(y_min, 3),
-                "w": round(width, 3),
-                "h": round(height, 3),
-            },
-            "bounding_box_mm": {"w": round(width_mm, 3), "h": round(height_mm, 3)},
-        }
-        if min_dimension_mm is not None:
-            out["min_dimension_mm"] = round(min_dimension_mm, 3)
-        if path_length_mm > 0:
-            out["path_length_mm"] = round(path_length_mm, 3)
-        if avg_seg is not None and avg_seg > 0:
-            out["avg_segment_length_mm"] = round(avg_seg, 3)
-        return out
+        path_length = _fast_path_length(svg_path)
+        return _metrics_from_bbox_and_length(
+            x_min, y_min, width, height, path_length, scale_mm, segment_count=segment_count
+        )
     except Exception:
         return None
 
@@ -299,7 +347,7 @@ def _enrich_element_geometry(
     elements: list[dict[str, Any]],
     scale_mm: float,
 ) -> tuple[float | None, dict[str, float] | None]:
-    """Attach path geometry from svgelements; return total path length and design bbox."""
+    """Attach path geometry; return total path length and design bbox."""
     total_path_length = 0.0
     path_len_known = 0
     min_x = min_y = float("inf")
@@ -308,13 +356,17 @@ def _enrich_element_geometry(
     for entry in elements:
         if entry.get("parse_error"):
             continue
-        d_attr = entry.get("_d_attr")
-        if not d_attr:
-            continue
-        metrics = _path_metrics_from_d(d_attr, scale_mm)
+        metrics = entry.pop("_precomputed_metrics", None)
+        if metrics is None:
+            d_attr = entry.get("_d_attr")
+            if not d_attr:
+                continue
+            metrics = _path_metrics_from_d(
+                d_attr, scale_mm, segment_count=entry.get("segment_count")
+            )
         if not metrics:
             continue
-        entry.update({k: v for k, v in metrics.items() if k != "_d_attr"})
+        entry.update(metrics)
         bbox = metrics.get("bounding_box") or {}
         if metrics.get("path_length_mm"):
             total_path_length += float(metrics["path_length_mm"])
@@ -385,6 +437,7 @@ def build_design_report(svg_bytes: bytes, document_name: str = "upload.svg", inc
 
     page_mm = _parse_page_size_mm(root)
     hidden_layer_count = _count_hidden_layers(root)
+    scale_mm = _viewbox_scale_to_mm(root, page_mm)
 
     for node in root.iter():
         inkstitch_attrs = {
@@ -443,14 +496,24 @@ def build_design_report(svg_bytes: bytes, document_name: str = "upload.svg", inc
                 "is_closed_path": is_closed,
             }
 
-            if include_geometry and d_attr:
-                geom = _path_geometry_from_d(d_attr)
-                if geom:
-                    entry["node_count"] = geom[0]
-                    entry["segment_count"] = geom[1]
-                    total_node += geom[0]
-                    total_seg += geom[1]
-                entry["_d_attr"] = d_attr
+            if include_geometry:
+                # Prefer O(1) analytics for circle/ellipse/rect. Converting those
+                # to arc path 'd' and calling svgelements.length() can take ~45s.
+                analytical = _analytical_shape_metrics(node, scale_mm)
+                if analytical is not None:
+                    entry["_precomputed_metrics"] = analytical
+                    entry["node_count"] = 4
+                    entry["segment_count"] = 4
+                    total_node += 4
+                    total_seg += 4
+                elif d_attr:
+                    geom = _path_geometry_from_d(d_attr)
+                    if geom:
+                        entry["node_count"] = geom[0]
+                        entry["segment_count"] = geom[1]
+                        total_node += geom[0]
+                        total_seg += geom[1]
+                    entry["_d_attr"] = d_attr
 
             stitch_type_counts[stitch_type] = stitch_type_counts.get(stitch_type, 0) + 1
             if entry["transform_present"]:
@@ -461,10 +524,10 @@ def build_design_report(svg_bytes: bytes, document_name: str = "upload.svg", inc
             elements.append({"id": elem_id, "parse_error": str(exc)})
 
     element_count = len([e for e in elements if "parse_error" not in e])
-    scale_mm = _viewbox_scale_to_mm(root, page_mm)
     total_path_mm, design_bbox = _enrich_element_geometry(elements, scale_mm)
     for entry in elements:
         entry.pop("_d_attr", None)
+        entry.pop("_precomputed_metrics", None)
 
     summary = {
         "document_name": Path(document_name).name,

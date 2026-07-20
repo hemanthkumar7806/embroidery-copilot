@@ -1,6 +1,7 @@
 """Anonymous session endpoints for SVG upload, preflight, and chat."""
 
 import json
+import time
 import uuid
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
@@ -104,13 +105,16 @@ async def create_session(svg_file: UploadFile = File(...)) -> CreateSessionRespo
     if len(raw) > settings.MAX_SVG_BYTES:
         raise HTTPException(status_code=413, detail=f"SVG exceeds {settings.MAX_SVG_BYTES} bytes.")
 
+    started = time.perf_counter()
     session_id = str(uuid.uuid4())
     svg_path = settings.DATA_DIR / "svgs" / f"{session_id}.svg"
     await run_in_threadpool(svg_path.write_bytes, raw)
+    t_write = time.perf_counter()
 
     design_report, rules_payload, design_report_json, welcome_content = await run_in_threadpool(
         _process_svg, raw, svg_file.filename
     )
+    t_process = time.perf_counter()
 
     preflight = PreflightReport(
         content=welcome_content,
@@ -126,7 +130,16 @@ async def create_session(svg_file: UploadFile = File(...)) -> CreateSessionRespo
         "[]",
         welcome_content,
     )
-    logger.info("session_created", session_id=session_id)
+    t_db = time.perf_counter()
+    logger.info(
+        "session_created",
+        session_id=session_id,
+        write_ms=round((t_write - started) * 1000),
+        process_ms=round((t_process - t_write) * 1000),
+        db_ms=round((t_db - t_process) * 1000),
+        total_ms=round((t_db - started) * 1000),
+        bytes=len(raw),
+    )
     return CreateSessionResponse(session_id=session_id, preflight=preflight)
 
 

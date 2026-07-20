@@ -2,23 +2,23 @@
 """Inkscape extension: upload the current SVG and open the chat UI in the browser.
 
 One click — no settings dialog. Defaults to hosted Render URL.
-Optional override: INKSCAPE_AI_BASE_URL environment variable (advanced/local).
+Optional override: INKSCAPE_AI_BASE_URL=http://127.0.0.1:8000 for local.
 
-Architecture (why it never freezes Inkscape):
-Inkscape runs extensions synchronously and BLOCKS its whole UI until the script
-returns. So the extension must do almost nothing in-process. It grabs the SVG,
-writes it to a temp file, launches a fully DETACHED background worker, and
-returns immediately. Inkscape unfreezes instantly. The worker (a second copy of
-this file run with --worker, stdout/stderr silenced) does all the slow work:
-wait for the free host to wake, upload, and open the browser. Because the worker
-is detached with no stdout, Inkscape never shows the "script returned data"
-dialog either.
+HTTP transport (best practice on Windows Inkscape):
+Inkscape ships a stripped Python whose urllib often hangs on POST to localhost
+even when the server has already received the body. System curl.exe is reliable,
+so we prefer curl for health checks and uploads; urllib is only a fallback.
+
+Local vs hosted:
+- localhost → sync upload in-process (fast, ~1s), then open browser
+- hosted → detached background worker so Inkscape never freezes on cold starts
 """
 
 from __future__ import annotations
 
 import json
 import os
+import shutil
 import socket
 import ssl
 import subprocess
@@ -45,12 +45,16 @@ except Exception:  # pragma: no cover - worker process path
     _HAVE_INKEX = False
 
 DEFAULT_URL = "https://embroidery-ext.onrender.com"
-PROBE_TIMEOUT_S = 12
-UPLOAD_TIMEOUT_S = 90
-# Worker runs in the background, so it can afford to wait for a cold free host.
-WAKE_POLL_S = 5
-WAKE_POLL_ATTEMPTS = 24  # ~2 min of patient polling, no UI impact
-UPLOAD_RETRIES = 3
+PROBE_TIMEOUT_S = 3
+UPLOAD_TIMEOUT_S = 30
+# Background worker (hosted only) can poll briefly if the server is still starting.
+WAKE_POLL_S = 2
+WAKE_POLL_ATTEMPTS = 5
+UPLOAD_RETRIES = 2
+# Local is always-on and fast. One attempt is enough once geometry is O(1).
+LOCAL_PROBE_TIMEOUT_S = 3
+LOCAL_UPLOAD_TIMEOUT_S = 10
+LOCAL_UPLOAD_RETRIES = 1
 SIDECAR_SUFFIX = ".inkscape-ai.json"
 
 # Debug logging: on by default during beta. Disable with INKSCAPE_AI_DEBUG=0.
@@ -92,9 +96,32 @@ def _ssl_context() -> ssl.SSLContext:
 _SSL_CONTEXT = _ssl_context()
 
 
+def _find_curl() -> str | None:
+    """Prefer Windows system curl — Inkscape's urllib hangs on local POST."""
+    explicit = os.environ.get("INKSCAPE_AI_CURL", "").strip()
+    candidates = [
+        explicit,
+        shutil.which("curl") or "",
+        r"C:\Windows\System32\curl.exe",
+        r"C:\Windows\SysWOW64\curl.exe",
+    ]
+    for path in candidates:
+        if path and Path(path).is_file():
+            return path
+    return None
+
+
+_CURL = _find_curl()
+
+
 def _base_url() -> str:
     env = os.environ.get("INKSCAPE_AI_BASE_URL", "").strip()
     return (env or DEFAULT_URL).rstrip("/")
+
+
+def _is_local(base_url: str) -> bool:
+    host = base_url.lower().split("://", 1)[-1].split("/", 1)[0].split(":", 1)[0]
+    return host in ("localhost", "127.0.0.1", "::1")
 
 
 def _is_timeout(exc: BaseException) -> bool:
@@ -172,16 +199,121 @@ def _parse_session_id(payload: dict) -> str:
 
 
 def _urlopen(req: request.Request, timeout: float):
-    return request.urlopen(req, timeout=timeout, context=_SSL_CONTEXT)
+    # Only attach SSL context for HTTPS. Passing it on HTTP can confuse some
+    # Python builds (including Inkscape's) and cause hung local uploads.
+    if req.full_url.lower().startswith("https:"):
+        return request.urlopen(req, timeout=timeout, context=_SSL_CONTEXT)
+    return request.urlopen(req, timeout=timeout)
 
 
-def _probe_health(base_url: str, timeout: float = PROBE_TIMEOUT_S) -> bool:
-    req = request.Request(f"{base_url}/health", method="GET")
+def _curl_run(args: list[str], timeout: float) -> tuple[int, str, str]:
+    """Run curl; return (exit_code, stdout, stderr)."""
+    assert _CURL is not None
+    # Soft wall slightly above curl's --max-time so we can classify timeouts.
+    wall = max(timeout + 3.0, 8.0)
+    try:
+        completed = subprocess.run(  # noqa: S603 - trusted curl invocation
+            args,
+            capture_output=True,
+            text=True,
+            timeout=wall,
+            creationflags=0x08000000 if os.name == "nt" else 0,  # CREATE_NO_WINDOW
+        )
+        return completed.returncode, completed.stdout or "", completed.stderr or ""
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("timeout") from exc
+
+
+def _curl_get_ok(url: str, timeout: float) -> bool:
+    args = [
+        _CURL,
+        "-sS",
+        "-o",
+        os.devnull,
+        "-w",
+        "%{http_code}",
+        "--max-time",
+        str(max(1, int(timeout))),
+        "-H",
+        "Connection: close",
+        url,
+    ]
+    code, out, err = _curl_run(args, timeout)
+    if code != 0:
+        _log(f"curl GET failed code={code} err={err[:200]!r}")
+        if code in (28, 7):  # timeout / couldn't connect
+            return False
+        return False
+    return out.strip() == "200"
+
+
+def _curl_post_svg(url: str, filename: str, data: bytes, timeout: float) -> dict:
+    """Upload SVG via curl multipart — reliable on Windows Inkscape."""
+    tmp = Path(tempfile.gettempdir()) / f"inkscape_ai_up_{uuid.uuid4().hex}.svg"
+    # Sanitize filename for curl -F (no quotes/newlines).
+    safe_name = "".join(c if c.isalnum() or c in "._-" else "_" for c in filename) or "upload.svg"
+    if not safe_name.lower().endswith(".svg"):
+        safe_name += ".svg"
+    try:
+        tmp.write_bytes(data)
+        # curl -F uses the path's basename unless we set filename= explicitly.
+        form = f"svg_file=@{tmp};filename={safe_name};type=image/svg+xml"
+        args = [
+            _CURL,
+            "-sS",
+            "-X",
+            "POST",
+            "--max-time",
+            str(max(1, int(timeout))),
+            "-H",
+            "Accept: application/json",
+            "-H",
+            "Connection: close",
+            "-F",
+            form,
+            url,
+        ]
+        code, out, err = _curl_run(args, timeout)
+        if code == 28:
+            raise RuntimeError("timeout")
+        if code == 7:
+            raise RuntimeError(f"url_error:could not connect to {url}")
+        if code != 0:
+            raise RuntimeError(f"url_error:curl exit {code}: {err[:200]}")
+        if not out.strip():
+            raise RuntimeError("Backend returned empty response.")
+        try:
+            payload = json.loads(out)
+        except json.JSONDecodeError as exc:
+            # HTTP error pages often aren't JSON.
+            raise RuntimeError(f"Backend returned non-JSON response: {out[:200]}") from exc
+        if not isinstance(payload, dict):
+            raise RuntimeError("Backend returned unexpected JSON.")
+        # curl -f would fail on HTTP errors; we parse and check session_id instead.
+        if "session_id" not in payload and "detail" in payload:
+            raise RuntimeError(f"Backend rejected upload: {payload.get('detail')}")
+        return payload
+    finally:
+        try:
+            tmp.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+
+def _probe_health(base_url: str, timeout: float | None = None) -> bool:
+    if timeout is None:
+        timeout = LOCAL_PROBE_TIMEOUT_S if _is_local(base_url) else PROBE_TIMEOUT_S
+    url = f"{base_url}/health"
     started = time.time()
     try:
+        if _CURL:
+            ok = _curl_get_ok(url, timeout)
+            _log(f"health probe (curl) -> {'200' if ok else 'fail'} in {time.time() - started:.1f}s")
+            return ok
+        req = request.Request(url, method="GET")
         with _urlopen(req, timeout) as resp:
             ok = resp.status == 200
-            _log(f"health probe -> {resp.status} in {time.time() - started:.1f}s")
+            _log(f"health probe (urllib) -> {resp.status} in {time.time() - started:.1f}s")
             return ok
     except Exception as exc:
         _log(f"health probe FAILED in {time.time() - started:.1f}s: {exc!r}")
@@ -213,9 +345,9 @@ def _wait_until_awake(base_url: str) -> bool:
     return False
 
 
-def _request_json_once(req: request.Request) -> dict:
+def _request_json_once_urllib(req: request.Request, timeout: float) -> dict:
     try:
-        with _urlopen(req, UPLOAD_TIMEOUT_S) as resp:
+        with _urlopen(req, timeout) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="ignore")[:300]
@@ -230,35 +362,42 @@ def _request_json_once(req: request.Request) -> dict:
         raise
 
 
-def _post_session_json(url: str, filename: str, data: bytes) -> dict:
-    """POST multipart with rebuild+retry (free hosts drop the first request sometimes)."""
+def _post_session_json(url: str, filename: str, data: bytes, timeout: float | None = None) -> dict:
+    """POST multipart with rebuild+retry. Prefer curl on Windows."""
+    local = _is_local(url.rsplit("/api/", 1)[0])
+    if timeout is None:
+        timeout = LOCAL_UPLOAD_TIMEOUT_S if local else UPLOAD_TIMEOUT_S
+    retries = LOCAL_UPLOAD_RETRIES if local else UPLOAD_RETRIES
     last_msg = ""
-    for attempt in range(1, UPLOAD_RETRIES + 1):
-        body, content_type = _encode_multipart(filename, data)
-        req = request.Request(
-            url,
-            data=body,
-            headers={"Content-Type": content_type, "Accept": "application/json"},
-            method="POST",
-        )
-        _log(f"POST {url} attempt {attempt}/{UPLOAD_RETRIES} ({len(data)} bytes)")
+    transport = "curl" if _CURL else "urllib"
+    for attempt in range(1, retries + 1):
+        _log(f"POST {url} attempt {attempt}/{retries} via {transport} ({len(data)} bytes)")
         started = time.time()
         try:
-            result = _request_json_once(req)
+            if _CURL:
+                result = _curl_post_svg(url, filename, data, timeout)
+            else:
+                body, content_type = _encode_multipart(filename, data)
+                req = request.Request(
+                    url,
+                    data=body,
+                    headers={"Content-Type": content_type, "Accept": "application/json"},
+                    method="POST",
+                )
+                result = _request_json_once_urllib(req, timeout)
             _log(f"POST ok in {time.time() - started:.1f}s -> session {result.get('session_id')}")
             return result
         except RuntimeError as exc:
             last_msg = str(exc)
             _log(f"POST attempt {attempt} failed in {time.time() - started:.1f}s: {last_msg}")
             retryable = last_msg == "timeout" or last_msg.startswith("url_error:")
-            if retryable and attempt < UPLOAD_RETRIES:
-                time.sleep(3 * attempt)
+            if retryable and attempt < retries:
+                time.sleep(0.5 * attempt)
                 continue
             if last_msg == "timeout":
                 raise RuntimeError(
                     "Upload timed out after retries.\n\n"
-                    f"Open {_base_url()} in your browser, wait until it loads,\n"
-                    "then click Send to AI Assistant again."
+                    f"Is the backend running?\nURL: {_base_url()}"
                 ) from exc
             if last_msg.startswith("url_error:"):
                 raise RuntimeError(
@@ -267,6 +406,22 @@ def _post_session_json(url: str, filename: str, data: bytes) -> dict:
                 ) from exc
             raise
     raise RuntimeError(f"Upload failed: {last_msg}")
+
+
+def _run_local_sync(
+    base_url: str, filename: str, svg_bytes: bytes, doc_path: Path | None
+) -> str:
+    """Local path: upload in-process. Localhost is fast; no worker needed."""
+    _log(f"local sync using curl={_CURL!r}")
+    if not _probe_health(base_url):
+        raise RuntimeError(
+            "Local backend is not running.\n\n"
+            "In a terminal:\n"
+            "  cd BE\n"
+            "  uv run python -m uvicorn app.main:app --host 0.0.0.0 --port 8000\n\n"
+            f"Then try again. URL: {base_url}"
+        )
+    return _upload_or_create_session(base_url, filename, svg_bytes, doc_path)
 
 
 def _create_session(base_url: str, filename: str, data: bytes) -> str:
@@ -384,7 +539,7 @@ def _worker_main(argv: list[str]) -> None:
 if _HAVE_INKEX:
 
     class SendToAI(inkex.EffectExtension):  # type: ignore[misc]
-        """Thin, non-blocking launcher. Does no network; spawns the worker."""
+        """Local: sync upload (fast). Hosted: detach worker (no UI freeze)."""
 
         def effect(self) -> None:
             base_url = _base_url()
@@ -392,12 +547,22 @@ if _HAVE_INKEX:
             _log(f"effect() start base_url={base_url} debug_log={LOG_PATH}")
             try:
                 svg_bytes, filename, doc_path = _resolve_document_bytes(self)
-                _log(f"resolved svg: filename={filename} bytes={len(svg_bytes)} doc_path={doc_path}")
-                _spawn_worker(svg_bytes, filename, doc_path, base_url)
+                _log(
+                    f"resolved svg: filename={filename} bytes={len(svg_bytes)} "
+                    f"doc_path={doc_path} local={_is_local(base_url)}"
+                )
+                if _is_local(base_url):
+                    # Localhost is ~0.3s — sync is fine and more reliable than a
+                    # detached worker (which was hanging on local HTTP uploads).
+                    session_id = _run_local_sync(base_url, filename, svg_bytes, doc_path)
+                    _log(f"local session ready: {session_id}")
+                    _open_browser(f"{base_url}/?s={session_id}&from=inkscape")
+                else:
+                    _spawn_worker(svg_bytes, filename, doc_path, base_url)
             except Exception as exc:  # noqa: BLE001
                 _log(f"effect() FAILED: {exc!r}")
-                inkex.errormsg(f"Send to AI Assistant could not start: {exc}")
-            # Return immediately either way — never block Inkscape's UI.
+                inkex.errormsg(f"Send to AI Assistant: {exc}")
+            # Hosted path returns immediately; local path returns after ~1s upload.
 
 
 def main() -> None:
