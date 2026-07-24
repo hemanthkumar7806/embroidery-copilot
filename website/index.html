@@ -1,0 +1,453 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Inkscape AI — Send your embroidery design to an AI assistant, one click from Inkscape</title>
+  <meta
+    name="description"
+    content="Inkscape AI is a free, one-click Inkscape extension that sends your embroidery design straight to an AI review — instant preflight findings and a chat, no account required."
+  />
+  <link rel="icon" type="image/svg+xml" href="assets/icons/favicon.svg" />
+  <link rel="stylesheet" href="css/styles.css" />
+  <!-- Analytics: fill in GA_MEASUREMENT_ID in js/analytics.js to enable Google Analytics. Inert until then. -->
+  <script src="js/analytics.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container nav">
+      <a class="wordmark" href="#top">
+        Inkscape<span class="dot">AI</span>
+        <span class="badge-beta">Beta</span>
+      </a>
+      <nav aria-label="Primary">
+        <ul class="nav-links">
+          <li><a href="#features">Features</a></li>
+          <li><a href="#how-it-works">How it works</a></li>
+          <li><a href="#install">Install</a></li>
+          <li><a href="#faq">FAQ</a></li>
+        </ul>
+      </nav>
+      <div class="nav-actions">
+        <a class="btn btn-primary btn-sm" href="downloads/Inkscape-AI.zip" download>Download</a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- Hero -->
+    <section class="hero" id="top">
+      <div class="container hero-grid">
+        <div class="hero-copy">
+          <span class="eyebrow">Free Inkscape extension</span>
+          <h1>Send your embroidery design to an AI assistant — one click from Inkscape.</h1>
+          <p class="hero-sub">
+            Inkscape AI uploads your current design and opens an instant review in
+            your browser: a preview, embroidery preflight findings, and a chat
+            ready to talk through your design.
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="downloads/Inkscape-AI.zip" download>
+              Download Inkscape AI
+            </a>
+            <a class="btn btn-secondary" href="#how-it-works">See how it works</a>
+          </div>
+          <p class="hero-note">
+            No account, no API key, no settings dialog — just Inkscape 1.0+ and an
+            internet connection.
+          </p>
+        </div>
+        <div class="hero-media">
+          <div
+            class="media-frame"
+            role="img"
+            aria-label="Placeholder: screenshot of the Inkscape AI review opening in the browser after one click"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="3" y="4" width="18" height="14" rx="2" />
+              <path d="M3 8h18" />
+              <circle cx="6" cy="6" r="0.6" fill="currentColor" />
+              <circle cx="8.5" cy="6" r="0.6" fill="currentColor" />
+              <path d="M7 12h6M7 15h4" />
+            </svg>
+            <span class="media-caption">Product screenshot coming soon</span>
+            <span class="media-subcaption">Design preview + preflight findings + chat</span>
+          </div>
+          <!-- Replace above with:
+          <img src="assets/img/screenshots/hero-review.png" alt="The Inkscape AI review opening in the browser with a design preview, preflight findings, and chat" />
+          -->
+        </div>
+      </div>
+    </section>
+
+    <!-- Trust bar -->
+    <div class="trust-bar">
+      <div class="container">
+        <ul>
+          <li>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5" /></svg>
+            MIT licensed
+          </li>
+          <li>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5" /></svg>
+            No account required
+          </li>
+          <li>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5" /></svg>
+            Windows · macOS · Linux
+          </li>
+          <li>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5" /></svg>
+            Open, auditable install scripts
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Features -->
+    <section class="section" id="features">
+      <div class="container">
+        <div class="section-head">
+          <h2>Built for embroidery digitizing, not generic vector art</h2>
+          <p>
+            Everything Inkscape AI checks and shows you is about getting your
+            design ready to stitch — not just ready to print.
+          </p>
+        </div>
+        <div class="feature-grid">
+          <div class="feature-card">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
+            </div>
+            <h3>One click, no setup</h3>
+            <p>
+              <code>Extensions → Inkscape AI → Send to AI Assistant</code>. No URL
+              fields, no settings dialog to fill in first.
+            </p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2 3 6v6c0 5 3.8 9 9 10 5.2-1 9-5 9-10V6l-9-4Z" /><path d="m9 12 2 2 4-4" /></svg>
+            </div>
+            <h3>Instant preflight findings</h3>
+            <p>
+              Your browser opens with a preview and embroidery-readiness checks —
+              the kind of stitch density, underlay, and pull-compensation issues
+              that matter before you digitize.
+            </p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M21 11.5a8.4 8.4 0 0 1-1 4 8.5 8.5 0 0 1-7.5 4.5A8.4 8.4 0 0 1 8 19l-5 1 1-5a8.4 8.4 0 0 1-1-4A8.5 8.5 0 0 1 7.5 3.5a8.4 8.4 0 0 1 4-1c4.5 0 9 3 9.5 8.5Z" /></svg>
+            </div>
+            <h3>AI chat about your design</h3>
+            <p>
+              The review opens with a welcome chat already loaded, ready to talk
+              through what it found in your design.
+            </p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 4v5h5" /><path d="M20 20v-5h-5" /><path d="M4.5 9a8 8 0 0 1 14-4.7L20 9" /><path d="M19.5 15a8 8 0 0 1-14 4.7L4 15" /></svg>
+            </div>
+            <h3>Resumable sessions</h3>
+            <p>
+              Re-run it on the same saved file and it continues the same chat —
+              your history isn't lost between sessions.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="section section-alt" id="how-it-works">
+      <div class="container">
+        <div class="section-head">
+          <h2>How it works</h2>
+          <p>From your Inkscape canvas to a finished review, in four steps.</p>
+        </div>
+        <div class="steps">
+          <ol class="step-list">
+            <li>
+              <div class="step-body">
+                <h3>Open or draw your design</h3>
+                <p>Work on your embroidery design in Inkscape as usual.</p>
+              </div>
+            </li>
+            <li>
+              <div class="step-body">
+                <h3>Run the menu command</h3>
+                <p><code>Extensions → Inkscape AI → Send to AI Assistant</code> — nothing else to fill in.</p>
+              </div>
+            </li>
+            <li>
+              <div class="step-body">
+                <h3>Your browser opens automatically</h3>
+                <p>Your design uploads and the review opens at the Inkscape AI review page, no copy-pasting links.</p>
+              </div>
+            </li>
+            <li>
+              <div class="step-body">
+                <h3>Review findings and chat</h3>
+                <p>See the preview, the preflight findings, and chat about your design right away.</p>
+              </div>
+            </li>
+          </ol>
+          <div class="how-it-works-media">
+            <div
+              class="media-frame"
+              role="img"
+              aria-label="Placeholder: short screen recording demonstrating the Send to AI Assistant workflow end to end"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="12" cy="12" r="9" />
+                <path d="m10 9 5 3-5 3Z" fill="currentColor" stroke="none" />
+              </svg>
+              <span class="media-caption">Demo video coming soon</span>
+              <span class="media-subcaption">Watch the full workflow in under a minute</span>
+            </div>
+            <!-- Replace above with:
+            <video controls muted playsinline poster="assets/img/screenshots/usage-poster.png">
+              <source src="assets/video/usage-demo.mp4" type="video/mp4" />
+              <source src="assets/video/usage-demo.webm" type="video/webm" />
+            </video>
+            -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Install -->
+    <section class="section" id="install">
+      <div class="container">
+        <div class="section-head">
+          <h2>Install in under a minute</h2>
+          <p>Download once, then run the installer for your operating system.</p>
+        </div>
+
+        <div class="tabs">
+          <div class="tablist" role="tablist" aria-label="Install instructions by operating system">
+            <button class="tab" role="tab" id="tab-windows" aria-controls="panel-windows" aria-selected="true">Windows</button>
+            <button class="tab" role="tab" id="tab-mac" aria-controls="panel-mac" aria-selected="false" tabindex="-1">macOS</button>
+            <button class="tab" role="tab" id="tab-linux" aria-controls="panel-linux" aria-selected="false" tabindex="-1">Linux</button>
+          </div>
+
+          <!-- Windows -->
+          <div class="tabpanel" id="panel-windows" role="tabpanel" aria-labelledby="tab-windows" tabindex="0">
+            <div>
+              <ol class="install-steps">
+                <li>Download and unzip <code>Inkscape-AI.zip</code>.</li>
+                <li>Double-click <code>Install-Windows.bat</code>.</li>
+                <li>When you see "Installation successful!", restart Inkscape.</li>
+              </ol>
+              <div class="callout">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" /></svg>
+                <span>If Windows SmartScreen warns you, click "More info" → "Run anyway". This is expected for a new, unsigned installer script.</span>
+              </div>
+              <details class="manual-install">
+                <summary>Manual install (only if the installer didn't work)</summary>
+                <p>Copy both files into your Inkscape user extensions folder, then restart Inkscape.</p>
+                <table class="path-table">
+                  <tbody>
+                    <tr><th>Folder</th><td><code>%APPDATA%\inkscape\extensions</code></td></tr>
+                    <tr><th>Files</th><td><code>send_to_ai.py</code>, <code>send_to_ai.inx</code></td></tr>
+                  </tbody>
+                </table>
+              </details>
+            </div>
+            <div
+              class="media-frame media-frame--square"
+              role="img"
+              aria-label="Placeholder: screenshot of the Windows installer success dialog"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="14" rx="2" /><path d="M3 8h18" /></svg>
+              <span class="media-caption">Screenshot coming soon</span>
+              <span class="media-subcaption">Windows install success dialog</span>
+            </div>
+            <!-- Replace above with:
+            <img src="assets/img/screenshots/install-windows-success.png" alt="Windows install success dialog" />
+            -->
+          </div>
+
+          <!-- macOS -->
+          <div class="tabpanel" id="panel-mac" role="tabpanel" aria-labelledby="tab-mac" hidden tabindex="0">
+            <div>
+              <ol class="install-steps">
+                <li>Download and unzip <code>Inkscape-AI.zip</code>.</li>
+                <li>Double-click <code>Install-Mac.command</code>.</li>
+                <li>When you see "Installation successful!", restart Inkscape.</li>
+              </ol>
+              <div class="callout">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" /></svg>
+                <span>If it won't open: right-click → Open → Open. Or in Terminal, run <code>sh Install-Mac.command</code>.</span>
+              </div>
+              <details class="manual-install">
+                <summary>Manual install (only if the installer didn't work)</summary>
+                <p>Copy both files into your Inkscape user extensions folder, then restart Inkscape.</p>
+                <table class="path-table">
+                  <tbody>
+                    <tr><th>Folder</th><td><code>~/Library/Application Support/org.inkscape.Inkscape/config/inkscape/extensions</code><br />(older Inkscape: <code>~/.config/inkscape/extensions</code>)</td></tr>
+                    <tr><th>Files</th><td><code>send_to_ai.py</code>, <code>send_to_ai.inx</code></td></tr>
+                  </tbody>
+                </table>
+              </details>
+            </div>
+            <div
+              class="media-frame media-frame--square"
+              role="img"
+              aria-label="Placeholder: screenshot of the macOS installer success dialog"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="14" rx="2" /><path d="M3 8h18" /></svg>
+              <span class="media-caption">Screenshot coming soon</span>
+              <span class="media-subcaption">macOS install success dialog</span>
+            </div>
+            <!-- Replace above with:
+            <img src="assets/img/screenshots/install-mac-success.png" alt="macOS install success dialog" />
+            -->
+          </div>
+
+          <!-- Linux -->
+          <div class="tabpanel" id="panel-linux" role="tabpanel" aria-labelledby="tab-linux" hidden tabindex="0">
+            <div>
+              <ol class="install-steps">
+                <li>Download and unzip <code>Inkscape-AI.zip</code>.</li>
+                <li>In a terminal, run <code>sh Install-Linux.sh</code>.</li>
+                <li>When you see "Installation successful!", restart Inkscape.</li>
+              </ol>
+              <details class="manual-install">
+                <summary>Manual install (only if the installer didn't work)</summary>
+                <p>Copy both files into your Inkscape user extensions folder, then restart Inkscape.</p>
+                <table class="path-table">
+                  <tbody>
+                    <tr><th>Folder</th><td><code>~/.config/inkscape/extensions</code></td></tr>
+                    <tr><th>Files</th><td><code>send_to_ai.py</code>, <code>send_to_ai.inx</code></td></tr>
+                  </tbody>
+                </table>
+              </details>
+            </div>
+            <div
+              class="media-frame media-frame--square"
+              role="img"
+              aria-label="Placeholder: screenshot of the Linux installer success dialog"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="14" rx="2" /><path d="M3 8h18" /></svg>
+              <span class="media-caption">Screenshot coming soon</span>
+              <span class="media-subcaption">Linux install success dialog</span>
+            </div>
+            <!-- Replace above with:
+            <img src="assets/img/screenshots/install-linux-success.png" alt="Linux install success dialog" />
+            -->
+          </div>
+        </div>
+
+        <ul class="requirements" style="margin-top: 40px">
+          <li>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 6 9 17l-5-5" /></svg>
+            <a href="https://inkscape.org" target="_blank" rel="noopener">Inkscape 1.0 or newer</a>
+          </li>
+          <li>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 6 9 17l-5-5" /></svg>
+            An internet connection
+          </li>
+          <li>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 6 9 17l-5-5" /></svg>
+            Windows, macOS, or Linux
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="section section-alt" id="faq">
+      <div class="container">
+        <div class="section-head">
+          <h2>Frequently asked questions</h2>
+        </div>
+        <div class="faq-list">
+          <details class="faq-item">
+            <summary>Do I need an account?</summary>
+            <p>No. There's no account, no setup, and no settings to configure — just install and use it.</p>
+          </details>
+          <details class="faq-item">
+            <summary>What data gets sent, and when?</summary>
+            <p>
+              Only your SVG file's content and filename, and only at the moment
+              you click "Send to AI Assistant". There's no background or idle
+              telemetry.
+            </p>
+          </details>
+          <details class="faq-item">
+            <summary>Does it remember my previous chat?</summary>
+            <p>
+              Yes — re-running it on the same saved file resumes the same chat
+              session for that design.
+            </p>
+          </details>
+          <details class="faq-item">
+            <summary>My browser didn't open. What do I do?</summary>
+            <p>
+              Copy the link shown in the Inkscape message dialog and paste it into
+              your browser.
+            </p>
+          </details>
+          <details class="faq-item">
+            <summary>Windows says the installer is unrecognized. Is that normal?</summary>
+            <p>
+              Yes — this is Windows SmartScreen warning about a new, unsigned
+              script. Click "More info", then "Run anyway".
+            </p>
+          </details>
+          <details class="faq-item">
+            <summary>macOS won't let me open the installer. What now?</summary>
+            <p>
+              Right-click the installer, choose "Open", then confirm "Open" again.
+              You can also run it from Terminal with <code>sh Install-Mac.command</code>.
+            </p>
+          </details>
+          <details class="faq-item">
+            <summary>The menu item is missing after I installed it.</summary>
+            <p>
+              Make sure both <code>send_to_ai.py</code> and <code>send_to_ai.inx</code>
+              are in your Inkscape extensions folder, and that you fully restarted
+              Inkscape (not just closed and reopened a document window).
+            </p>
+          </details>
+          <details class="faq-item">
+            <summary>Is it free and open source?</summary>
+            <p>Yes. Inkscape AI is released under the MIT license.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="section cta-band">
+      <div class="container">
+        <h2>Ready to try it?</h2>
+        <p>Download the extension, run the installer for your OS, and you're set.</p>
+        <a class="btn btn-primary" href="downloads/Inkscape-AI.zip" download>Download Inkscape AI</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-grid">
+      <div>
+        <a class="wordmark" href="#top">Inkscape<span class="dot">AI</span></a>
+        <p class="footer-meta">© <span id="footer-year">2026</span> stitchbaseai@gmail.com — MIT licensed</p>
+      </div>
+      <ul class="footer-links">
+        <li><a href="#features">Features</a></li>
+        <li><a href="#install">Install</a></li>
+        <li><a href="#faq">FAQ</a></li>
+        <li><a href="mailto:stitchbaseai@gmail.com">Support</a></li>
+      </ul>
+    </div>
+  </footer>
+
+  <script src="js/main.js" defer></script>
+</body>
+</html>

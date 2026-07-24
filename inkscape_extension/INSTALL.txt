@@ -1,0 +1,74 @@
+Inkscape AI — Extension (Install Guide)
+=======================================
+
+One click in Inkscape uploads your current design and opens the
+Inkscape AI review in your browser. No account, no setup, no settings.
+
+What you need
+-------------
+- Inkscape 1.0 or newer (https://inkscape.org)
+- An internet connection
+
+EASIEST: one-click installer
+-----------------------------
+After unzipping, run the installer for your system. It copies the files
+into the right Inkscape folder automatically and then shows a popup
+telling you whether it SUCCEEDED or FAILED - no guesswork.
+
+  Windows : double-click  Install-Windows.bat
+            (If Windows SmartScreen warns: "More info" -> "Run anyway".)
+
+  macOS   : double-click  Install-Mac.command
+            (If it won't open: right-click -> Open -> Open;
+             or in Terminal run:  sh Install-Mac.command )
+
+  Linux   : in a terminal run:   sh Install-Linux.sh
+
+When you see the "Installation successful!" popup, RESTART Inkscape.
+Done - skip the manual steps below.
+
+(The popup also runs a quick online check and tells you if the Inkscape AI
+service is reachable. If it says it couldn't reach the server, that does
+NOT affect the install - just try using it again in a moment.)
+
+
+MANUAL install (only if the installer didn't work)
+--------------------------------------------------
+Step 1 — Find your Inkscape user extensions folder
+Open Inkscape, then go to  Edit -> Preferences -> System
+and look at "User extensions". That is the folder you need.
+
+Typical locations:
+  Windows : %APPDATA%\inkscape\extensions
+  macOS   : ~/Library/Application Support/org.inkscape.Inkscape/config/inkscape/extensions
+            (older: ~/.config/inkscape/extensions)
+  Linux   : ~/.config/inkscape/extensions
+
+Step 2 — Copy BOTH files into that extensions folder:
+    send_to_ai.py
+    send_to_ai.inx
+
+Step 3 — Fully close and reopen Inkscape.
+
+How to use it
+-------------
+1. Open or draw a design in Inkscape.
+2. Go to:  Extensions  ->  Inkscape AI  ->  Send to AI Assistant
+3. Your browser opens at https://stitchbase.duckdns.org with your
+   design loaded and the AI review ready to chat.
+
+Notes
+-----
+- Large/complex designs take a few seconds to analyze — this is normal.
+- Re-running on the same saved file keeps your previous chat for that design.
+- Nothing to configure: the service URL is already built in.
+
+Troubleshooting
+---------------
+- Menu not showing after install: make sure BOTH files are in the
+  extensions folder and you fully restarted Inkscape.
+- Browser did not open: copy the link shown in the Inkscape message and
+  paste it into your browser.
+- Nothing happens / error: check your internet connection and try again.
+
+Support: contact the Inkscape AI team.

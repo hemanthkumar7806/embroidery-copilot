@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Inkscape extension: upload the current SVG and open the chat UI in the browser.
 
-One click — no settings dialog. Defaults to hosted Render URL.
+One click — no settings dialog. Defaults to the hosted AWS backend.
 Optional override: INKSCAPE_AI_BASE_URL=http://127.0.0.1:8000 for local.
 
 HTTP transport (best practice on Windows Inkscape):
@@ -44,7 +44,7 @@ except Exception:  # pragma: no cover - worker process path
     inkex = None  # type: ignore[assignment]
     _HAVE_INKEX = False
 
-DEFAULT_URL = "https://embroidery-ext.onrender.com"
+DEFAULT_URL = "https://stitchbase.duckdns.org"
 PROBE_TIMEOUT_S = 3
 UPLOAD_TIMEOUT_S = 30
 # Background worker (hosted only) can poll briefly if the server is still starting.

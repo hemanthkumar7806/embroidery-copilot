@@ -44,6 +44,7 @@ class Settings:
     ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
     GROQ_BASE_URL: str = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+    AWS_REGION: str = os.getenv("AWS_REGION", os.getenv("AWS_DEFAULT_REGION", "us-east-1"))
     DEFAULT_LLM_MODEL: str = os.getenv("DEFAULT_LLM_MODEL", "")
     DEFAULT_LLM_TEMPERATURE: float = float(os.getenv("DEFAULT_LLM_TEMPERATURE", "0.2"))
     MAX_TOKENS: int = int(os.getenv("MAX_TOKENS", "4096"))
@@ -62,6 +63,21 @@ class Settings:
     SESSION_TTL_DAYS: int = int(os.getenv("SESSION_TTL_DAYS", "7"))
     MAX_SVG_BYTES: int = int(os.getenv("MAX_SVG_BYTES", str(5 * 1024 * 1024)))
 
+    # Optional external database (e.g. Supabase Postgres). When empty, falls back
+    # to the local SQLite file at DATA_DIR/app.db.
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "").strip()
+
+    # Analytics + admin dashboard
+    ANALYTICS_ENABLED: bool = _parse_bool(os.getenv("ANALYTICS_ENABLED"), True)
+    VISITOR_COOKIE_NAME: str = os.getenv("VISITOR_COOKIE_NAME", "vid").strip() or "vid"
+    # Cookies default to Secure in production; disable automatically in DEBUG so
+    # they work over plain http://localhost during development.
+    COOKIE_SECURE: bool = _parse_bool(
+        os.getenv("COOKIE_SECURE"), os.getenv("DEBUG", "true").lower() not in ("true", "1", "yes")
+    )
+    # Admin dashboard bearer token. When empty, admin endpoints are disabled.
+    ADMIN_TOKEN: str = os.getenv("ADMIN_TOKEN", "").strip()
+
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "DEBUG" if DEBUG else "INFO")
     LOG_FORMAT: str = os.getenv("LOG_FORMAT", "console")
 
@@ -72,6 +88,7 @@ class Settings:
                 "gemini": "gemini-2.5-flash",
                 "anthropic": "claude-3-5-sonnet-20241022",
                 "groq": "llama-3.1-8b-instant",
+                "bedrock": "anthropic.claude-3-5-sonnet-20240620-v1:0",
             }
             self.DEFAULT_LLM_MODEL = defaults.get(self.LLM_PROVIDER, "gpt-4o-mini")
 
@@ -83,7 +100,31 @@ class Settings:
         return self.DATA_DIR / "app.db"
 
     @property
+    def db_is_sqlite(self) -> bool:
+        return not self.DATABASE_URL
+
+    @property
+    def resolved_database_url(self) -> str:
+        """SQLAlchemy URL: external DATABASE_URL if set, else local SQLite."""
+        if not self.DATABASE_URL:
+            return f"sqlite:///{self.sqlite_path.as_posix()}"
+
+        url = self.DATABASE_URL
+        # SQLAlchemy needs an explicit driver; use psycopg (v3).
+        if url.startswith("postgresql://"):
+            url = url.replace("postgresql://", "postgresql+psycopg://", 1)
+        elif url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql+psycopg://", 1)
+        # Managed Postgres (Supabase) requires TLS.
+        if "+psycopg" in url and "sslmode=" not in url:
+            sep = "&" if "?" in url else "?"
+            url = f"{url}{sep}sslmode=require"
+        return url
+
+    @property
     def has_llm(self) -> bool:
+        if self.LLM_PROVIDER == "bedrock":
+            return True
         if self.LLM_PROVIDER == "anthropic":
             return bool(self.ANTHROPIC_API_KEY)
         if self.LLM_PROVIDER == "groq":

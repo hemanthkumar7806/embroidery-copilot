@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Inkscape AI — Admin</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --panel: #ffffff;
+    --ink: #1f2430;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --brand: #2e7d32;
+    --brand-2: #1b5e20;
+    --accent: #2563eb;
+    --warn: #c62828;
+    --chip: #eef2f7;
+    --shadow: 0 1px 3px rgba(0,0,0,.08), 0 8px 24px rgba(0,0,0,.05);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+    background: var(--bg); color: var(--ink); font-size: 14px;
+  }
+  a { color: var(--accent); }
+  button {
+    font: inherit; cursor: pointer; border: 1px solid var(--line);
+    background: #fff; border-radius: 8px; padding: 8px 14px; color: var(--ink);
+    transition: background .15s, border-color .15s;
+  }
+  button:hover { background: #f0f2f5; }
+  button.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+  button.primary:hover { background: var(--brand-2); }
+  input, select {
+    font: inherit; padding: 9px 11px; border: 1px solid var(--line);
+    border-radius: 8px; background: #fff; color: var(--ink); width: 100%;
+  }
+  .app { display: grid; grid-template-columns: 210px 1fr; min-height: 100vh; }
+  .sidebar {
+    background: #101828; color: #cbd5e1; padding: 20px 14px; display: flex; flex-direction: column; gap: 4px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 18px; }
+  .brand .dot { width: 12px; height: 12px; border-radius: 3px; background: var(--brand); }
+  .brand b { color: #fff; font-size: 15px; letter-spacing: .2px; }
+  .nav { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
+  .nav button {
+    background: transparent; border: none; color: #cbd5e1; text-align: left;
+    padding: 10px 12px; border-radius: 8px; width: 100%;
+  }
+  .nav button:hover { background: #1c2740; }
+  .nav button.active { background: var(--brand); color: #fff; }
+  .sidebar .foot { margin-top: auto; font-size: 12px; color: #7c8aa5; padding: 8px; }
+  .main { padding: 22px 26px; overflow: auto; }
+  .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; gap: 12px; }
+  .topbar h1 { font-size: 20px; margin: 0; }
+  .topbar .tools { display: flex; gap: 8px; align-items: center; }
+  .status { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .status .live { width: 8px; height: 8px; border-radius: 50%; background: var(--brand); }
+  .status .down { background: var(--warn); }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px,1fr)); gap: 14px; margin-bottom: 20px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; box-shadow: var(--shadow); }
+  .card .k { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .4px; }
+  .card .v { font-size: 26px; font-weight: 700; margin-top: 6px; }
+  .card .s { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  .grid2 { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; margin-bottom: 20px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 1100px){ .grid2, .grid3 { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; box-shadow: var(--shadow); }
+  .panel h3 { margin: 0 0 12px; font-size: 14px; }
+  .chart-wrap { position: relative; height: 260px; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 10px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .3px; color: var(--muted); }
+  tbody tr:hover { background: #f8fafc; cursor: pointer; }
+  td.mono, .mono { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 12px; }
+  .chip { display: inline-block; padding: 2px 9px; border-radius: 999px; background: var(--chip); font-size: 12px; color: #374151; }
+  .chip.ok { background: #e6f4ea; color: #1b5e20; }
+  .chip.warn { background: #fdecea; color: #b71c1c; }
+  .chip.info { background: #e8f0fe; color: #1a56db; }
+  .muted { color: var(--muted); }
+  .toolbar { display: flex; gap: 10px; margin-bottom: 14px; align-items: center; flex-wrap: wrap; }
+  .toolbar input { max-width: 260px; }
+  .toolbar select { max-width: 180px; }
+
+  .empty { padding: 40px; text-align: center; color: var(--muted); }
+  .err { background: #fdecea; color: #b71c1c; padding: 12px 14px; border-radius: 10px; margin-bottom: 14px; }
+
+  /* Slide-over drawer */
+  .overlay { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: none; z-index: 40; }
+  .overlay.open { display: block; }
+  .drawer {
+    position: fixed; top: 0; right: 0; height: 100%; width: min(760px, 96vw);
+    background: var(--bg); box-shadow: -8px 0 30px rgba(0,0,0,.2); z-index: 50;
+    transform: translateX(100%); transition: transform .22s ease; overflow: auto;
+  }
+  .drawer.open { transform: translateX(0); }
+  .drawer .dh { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--line); background: #fff; position: sticky; top: 0; }
+  .drawer .db { padding: 18px 20px; }
+  .kv { display: grid; grid-template-columns: 150px 1fr; gap: 6px 12px; }
+  .kv div.k { color: var(--muted); }
+  .svgbox { border: 1px dashed var(--line); border-radius: 10px; background:
+     repeating-conic-gradient(#f3f4f6 0% 25%, #fff 0% 50%) 50% / 20px 20px;
+     padding: 10px; max-height: 360px; overflow: auto; display: flex; align-items: center; justify-content: center; }
+  .svgbox svg { max-width: 100%; height: auto; }
+  .chat { display: flex; flex-direction: column; gap: 10px; }
+  .msg { border-radius: 12px; padding: 10px 12px; max-width: 90%; white-space: pre-wrap; word-break: break-word; }
+  .msg.user { align-self: flex-end; background: #e8f0fe; }
+  .msg.assistant { align-self: flex-start; background: #fff; border: 1px solid var(--line); }
+  .msg .meta { font-size: 11px; color: var(--muted); margin-top: 6px; }
+  .section-title { font-size: 13px; text-transform: uppercase; letter-spacing: .3px; color: var(--muted); margin: 20px 0 8px; }
+
+  /* Setup modal */
+  .modal-bg { position: fixed; inset: 0; background: rgba(15,23,42,.55); display: flex; align-items: center; justify-content: center; z-index: 100; }
+  .modal { background: #fff; border-radius: 14px; width: min(440px, 92vw); padding: 24px; box-shadow: var(--shadow); }
+  .modal h2 { margin: 0 0 4px; font-size: 18px; }
+  .modal p { margin: 0 0 16px; color: var(--muted); font-size: 13px; }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .hidden { display: none !important; }
+  .timeline { position: relative; padding-left: 18px; }
+  .timeline .ev { position: relative; padding: 8px 0 8px 4px; border-left: 2px solid var(--line); margin-left: 4px; padding-left: 16px; }
+  .timeline .ev::before { content: ""; position: absolute; left: -7px; top: 12px; width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+</style>
+</head>
+<body>
+
+<div id="setup" class="modal-bg hidden">
+  <div class="modal">
+    <h2>Connect to your backend</h2>
+    <p>Private dashboard. Enter your backend URL and admin token (from <span class="mono">ADMIN_TOKEN</span>). Stored only in this browser.</p>
+    <div class="field">
+      <label>Backend base URL</label>
+      <input id="setupUrl" placeholder="https://stitchbase.duckdns.org" />
+    </div>
+    <div class="field">
+      <label>Admin token</label>
+      <input id="setupToken" type="password" placeholder="your ADMIN_TOKEN" />
+    </div>
+    <div id="setupErr" class="err hidden"></div>
+    <div style="display:flex; gap:10px; justify-content:flex-end;">
+      <button class="primary" id="setupSave">Connect</button>
+    </div>
+  </div>
+</div>
+
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><span class="dot"></span><b>Inkscape AI</b></div>
+    <div class="nav" id="nav">
+      <button data-view="overview" class="active">Overview</button>
+      <button data-view="visitors">Visitors</button>
+      <button data-view="sessions">Sessions</button>
+      <button data-view="journey">Journey</button>
+    </div>
+    <div class="foot">Admin analytics<br/>private &middot; local</div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <h1 id="viewTitle">Overview</h1>
+      <div class="tools">
+        <span class="status" id="status"><span class="live" id="statusDot"></span><span id="statusText">connecting…</span></span>
+        <button id="refreshBtn">Refresh</button>
+        <button id="settingsBtn">Settings</button>
+      </div>
+    </div>
+    <div id="globalErr" class="err hidden"></div>
+    <div id="content"></div>
+  </main>
+</div>
+
+<div class="overlay" id="overlay"></div>
+<div class="drawer" id="drawer">
+  <div class="dh"><b id="drawerTitle">Session</b><button id="drawerClose">Close</button></div>
+  <div class="db" id="drawerBody"></div>
+</div>
+
+<script>
+const LS = { url: "iai_admin_url", token: "iai_admin_token" };
+const state = {
+  base: localStorage.getItem(LS.url) || "",
+  token: localStorage.getItem(LS.token) || "",
+  view: "overview",
+  charts: {},
+};
+
+const $ = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtDate = (iso) => { if(!iso) return "—"; const d=new Date(iso); return isNaN(d)?"—":d.toLocaleString(); };
+const rel = (iso) => {
+  if(!iso) return "—"; const d=new Date(iso); const s=(Date.now()-d.getTime())/1000;
+  if(s<60) return Math.floor(s)+"s ago"; if(s<3600) return Math.floor(s/60)+"m ago";
+  if(s<86400) return Math.floor(s/3600)+"h ago"; return Math.floor(s/86400)+"d ago";
+};
+const num = (n) => (n==null?"—":Number(n).toLocaleString());
+const ms = (n) => (n==null?"—":(n>=1000?(n/1000).toFixed(1)+"s":n+"ms"));
+const short = (s,n=10) => s ? String(s).slice(0,n) : "—";
+
+async function api(path) {
+  const res = await fetch(state.base.replace(/\/$/,"") + "/admin/api" + path, {
+    headers: { "X-Admin-Token": state.token },
+  });
+  if (res.status === 401) throw new Error("Unauthorized — check your admin token.");
+  if (res.status === 503) throw new Error("Admin API disabled — set ADMIN_TOKEN on the backend.");
+  if (!res.ok) throw new Error("Request failed (" + res.status + ")");
+  return res.json();
+}
+
+function setStatus(ok, text) {
+  $("#statusDot").className = ok ? "live" : "live down";
+  $("#statusText").textContent = text;
+}
+function showError(msg) { const e=$("#globalErr"); e.textContent=msg; e.classList.remove("hidden"); }
+function clearError(){ $("#globalErr").classList.add("hidden"); }
+
+/* ---------- Setup ---------- */
+function openSetup() {
+  $("#setupUrl").value = state.base || "";
+  $("#setupToken").value = state.token || "";
+  $("#setup").classList.remove("hidden");
+}
+$("#setupSave").onclick = async () => {
+  const url = $("#setupUrl").value.trim();
+  const token = $("#setupToken").value.trim();
+  if (!url || !token) { const e=$("#setupErr"); e.textContent="Both fields are required."; e.classList.remove("hidden"); return; }
+  state.base = url; state.token = token;
+  localStorage.setItem(LS.url, url); localStorage.setItem(LS.token, token);
+  $("#setup").classList.add("hidden");
+  await boot();
+};
+$("#settingsBtn").onclick = openSetup;
+$("#refreshBtn").onclick = () => render();
+
+/* ---------- Navigation ---------- */
+$$("#nav button").forEach(b => b.onclick = () => {
+  state.view = b.dataset.view;
+  $$("#nav button").forEach(x => x.classList.toggle("active", x===b));
+  $("#viewTitle").textContent = b.textContent;
+  render();
+});
+
+/* ---------- Views ---------- */
+async function render() {
+  clearError();
+  const c = $("#content");
+  c.innerHTML = '<div class="empty">Loading…</div>';
+  try {
+    if (state.view === "overview") await renderOverview(c);
+    else if (state.view === "visitors") await renderVisitors(c);
+    else if (state.view === "sessions") await renderSessions(c);
+    else if (state.view === "journey") await renderJourney(c);
+    setStatus(true, "connected");
+  } catch (e) {
+    setStatus(false, "error");
+    c.innerHTML = "";
+    showError(e.message || String(e));
+  }
+}
+
+function statusChip(s) {
+  if (!s) return '<span class="chip">—</span>';
+  const up = String(s).toUpperCase();
+  const cls = up.includes("SAFE") ? "ok" : (up.includes("FIX")||up.includes("STOP")||up.includes("FAIL")) ? "warn" : "info";
+  return `<span class="chip ${cls}">${esc(s)}</span>`;
+}
+
+async function renderOverview(c) {
+  const d = await api("/overview");
+  const t = d.totals || {};
+  const cards = [
+    ["Visitors", num(t.visitors)],
+    ["Sessions", num(t.sessions), num(t.sessions_24h)+" in 24h"],
+    ["Messages", num(t.messages), num(t.user_messages)+" from users"],
+    ["Sessions (7d)", num(t.sessions_7d)],
+    ["Avg msgs / session", t.avg_messages_per_session ?? "—"],
+    ["Avg AI latency", ms(t.avg_assistant_latency_ms)],
+  ];
+  c.innerHTML = `
+    <div class="cards">${cards.map(x=>`
+      <div class="card"><div class="k">${x[0]}</div><div class="v">${x[1]}</div>${x[2]?`<div class="s">${x[2]}</div>`:""}</div>`).join("")}</div>
+    <div class="grid2">
+      <div class="panel"><h3>Sessions over time (14 days)</h3><div class="chart-wrap"><canvas id="chArea"></canvas></div></div>
+      <div class="panel"><h3>Rule decision mix</h3><div class="chart-wrap"><canvas id="chStatus"></canvas></div></div>
+    </div>
+    <div class="grid3">
+      <div class="panel"><h3>Top issues detected</h3><div class="chart-wrap"><canvas id="chIssues"></canvas></div></div>
+      <div class="panel"><h3>Session type</h3><div class="chart-wrap"><canvas id="chKind"></canvas></div></div>
+    </div>`;
+
+  Object.values(state.charts).forEach(ch => ch.destroy && ch.destroy());
+  state.charts = {};
+  const sot = d.sessions_over_time || [];
+  state.charts.area = new Chart($("#chArea"), {
+    type: "line",
+    data: { labels: sot.map(x=>x.date.slice(5)), datasets: [{ label:"Sessions", data: sot.map(x=>x.count),
+      borderColor:"#2e7d32", backgroundColor:"rgba(46,125,50,.12)", fill:true, tension:.3, pointRadius:2 }] },
+    options: baseOpts()
+  });
+  const sd = d.rule_status_distribution || {};
+  state.charts.status = donut(Object.keys(sd), Object.values(sd), "#chStatus");
+  const ti = (d.top_issues||[]).slice(0,8);
+  state.charts.issues = new Chart($("#chIssues"), {
+    type: "bar",
+    data: { labels: ti.map(x=>x.title), datasets: [{ label:"Count", data: ti.map(x=>x.count), backgroundColor:"#2563eb" }] },
+    options: { ...baseOpts(), indexAxis: "y" }
+  });
+  const kd = d.session_kind_distribution || {};
+  state.charts.kind = donut(Object.keys(kd), Object.values(kd), "#chKind");
+}
+
+function baseOpts(){ return { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } },
+  scales:{ x:{ grid:{ display:false } }, y:{ beginAtZero:true, ticks:{ precision:0 } } } }; }
+function donut(labels, data, sel){
+  const colors=["#2e7d32","#2563eb","#c62828","#f59e0b","#7c3aed","#0891b2","#64748b"];
+  return new Chart($(sel), { type:"doughnut",
+    data:{ labels, datasets:[{ data, backgroundColor: labels.map((_,i)=>colors[i%colors.length]) }] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:"bottom" } }, cutout:"62%" } });
+}
+
+async function renderVisitors(c) {
+  const { visitors } = await api("/visitors?limit=200");
+  if (!visitors.length) { c.innerHTML = '<div class="panel empty">No visitors yet.</div>'; return; }
+  c.innerHTML = `<div class="panel"><table>
+    <thead><tr><th>Visitor</th><th>Sessions</th><th>Messages</th><th>Last seen</th><th>First seen</th><th>Last IP</th><th>Device</th></tr></thead>
+    <tbody>${visitors.map(v=>`
+      <tr data-vid="${esc(v.id)}">
+        <td class="mono">${short(v.id,8)}…</td>
+        <td>${num(v.session_count)}</td>
+        <td>${num(v.message_count)}</td>
+        <td title="${esc(fmtDate(v.last_seen_at))}">${rel(v.last_seen_at)}</td>
+        <td class="muted">${fmtDate(v.first_seen_at)}</td>
+        <td class="mono">${esc(v.last_ip||"—")}</td>
+        <td class="muted" title="${esc(v.user_agent||"")}">${esc((v.user_agent||"—").slice(0,40))}</td>
+      </tr>`).join("")}</tbody></table></div>`;
+  $$("#content tbody tr").forEach(tr => tr.onclick = () => {
+    state.view = "sessions";
+    $$("#nav button").forEach(x => x.classList.toggle("active", x.dataset.view==="sessions"));
+    $("#viewTitle").textContent = "Sessions";
+    renderSessions($("#content"), tr.dataset.vid);
+  });
+}
+
+async function renderSessions(c, visitorId) {
+  c.innerHTML = `
+    <div class="toolbar">
+      <input id="q" placeholder="Search filename…" />
+      <select id="kind"><option value="">All types</option><option value="svg">SVG</option><option value="chat_only">Chat only</option></select>
+      ${visitorId?`<span class="chip info">visitor ${short(visitorId,8)}… <a href="#" id="clearV">clear</a></span>`:""}
+      <button id="go">Filter</button>
+    </div>
+    <div class="panel" id="stbl"><div class="empty">Loading…</div></div>`;
+  const load = async () => {
+    const q = $("#q").value.trim();
+    const kind = $("#kind").value;
+    let path = "/sessions?limit=200";
+    if (visitorId) path += "&visitor_id=" + encodeURIComponent(visitorId);
+    if (kind) path += "&kind=" + encodeURIComponent(kind);
+    if (q) path += "&q=" + encodeURIComponent(q);
+    const { sessions } = await api(path);
+    const box = $("#stbl");
+    if (!sessions.length) { box.innerHTML = '<div class="empty">No sessions.</div>'; return; }
+    box.innerHTML = `<table>
+      <thead><tr><th>When</th><th>Type</th><th>File</th><th>Source</th><th>Decision</th><th>Issues</th><th>Msgs</th><th>IP</th></tr></thead>
+      <tbody>${sessions.map(s=>`
+        <tr data-id="${esc(s.id)}">
+          <td title="${esc(fmtDate(s.created_at))}">${rel(s.created_at)}</td>
+          <td>${s.kind==="svg"?'<span class="chip info">SVG</span>':'<span class="chip">Chat</span>'}</td>
+          <td>${esc(s.filename||"—")}</td>
+          <td class="muted">${esc(s.source||"—")}</td>
+          <td>${statusChip(s.rule_status)}</td>
+          <td>${num(s.issue_count)}</td>
+          <td>${num(s.message_count)}</td>
+          <td class="mono">${esc(s.ip||"—")}</td>
+        </tr>`).join("")}</tbody></table>`;
+    $$("#stbl tbody tr").forEach(tr => tr.onclick = () => openSession(tr.dataset.id));
+  };
+  $("#go").onclick = load;
+  $("#q").onkeydown = (e) => { if(e.key==="Enter") load(); };
+  $("#kind").onchange = load;
+  if (visitorId) $("#clearV").onclick = (e) => { e.preventDefault(); renderSessions(c); };
+  await load();
+}
+
+async function openSession(id) {
+  openDrawer("Session " + short(id,8) + "…", '<div class="empty">Loading…</div>');
+  try {
+    const s = await api("/sessions/" + encodeURIComponent(id));
+    const meta = `
+      <div class="kv">
+        <div class="k">Session</div><div class="mono">${esc(s.id)}</div>
+        <div class="k">Visitor</div><div class="mono">${esc(s.visitor_id||"— (not opened in browser)")}</div>
+        <div class="k">Type</div><div>${esc(s.kind)} &middot; ${esc(s.source||"—")}</div>
+        <div class="k">File</div><div>${esc(s.filename||"—")} ${s.svg_bytes?`(${(s.svg_bytes/1024).toFixed(1)} KB)`:""}</div>
+        <div class="k">Dimensions</div><div>${s.svg_width_mm?`${s.svg_width_mm} × ${s.svg_height_mm} mm`:"—"} &middot; ${num(s.element_count)} elements</div>
+        <div class="k">Decision</div><div>${statusChip(s.rule_status)} &middot; ${num(s.issue_count)} issues</div>
+        <div class="k">Timing</div><div>parse ${ms(s.process_ms)} &middot; total ${ms(s.total_ms)}</div>
+        <div class="k">Created</div><div>${fmtDate(s.created_at)}</div>
+        <div class="k">Opened</div><div>${fmtDate(s.opened_at)}</div>
+        <div class="k">IP / device</div><div class="mono">${esc(s.ip||"—")}</div>
+      </div>`;
+
+    let issues = "";
+    if (s.top_issues && s.top_issues.length) {
+      issues = `<div class="section-title">Top issues</div>` + s.top_issues.map(i=>
+        `<div style="margin-bottom:6px">${statusChip(i.severity)} <b>${esc(i.title||i.id)}</b> <span class="muted">${esc(i.category||"")}</span></div>`).join("");
+    }
+
+    let svg = "";
+    if (s.svg_text && s.kind === "svg") {
+      svg = `<div class="section-title">SVG preview</div><div class="svgbox" id="svgPrev"></div>`;
+    }
+
+    const msgs = (s.messages||[]);
+    const chat = msgs.length ? `<div class="section-title">Chat (${msgs.length})</div>
+      <div class="chat">${msgs.map(m=>`
+        <div class="msg ${m.role==='user'?'user':'assistant'}">${esc(m.content)}
+          <div class="meta">${esc(m.role)} &middot; ${fmtDate(m.created_at)}${m.latency_ms!=null?` &middot; ${ms(m.latency_ms)}`:""}${m.rag_status?` &middot; rag:${esc(m.rag_status)}`:""}</div>
+        </div>`).join("")}</div>` : `<div class="section-title">Chat</div><div class="muted">No messages.</div>`;
+
+    $("#drawerBody").innerHTML = meta + issues + svg + chat;
+    if (s.svg_text && s.kind === "svg") {
+      const box = $("#svgPrev");
+      box.innerHTML = s.svg_text;
+      const el = box.querySelector("svg");
+      if (el) { el.removeAttribute("width"); el.removeAttribute("height"); el.style.maxWidth="100%"; el.style.maxHeight="340px"; }
+    }
+  } catch (e) {
+    $("#drawerBody").innerHTML = `<div class="err">${esc(e.message||String(e))}</div>`;
+  }
+}
+
+async function renderJourney(c) {
+  const { events } = await api("/events?limit=300");
+  if (!events.length) { c.innerHTML = '<div class="panel empty">No events yet.</div>'; return; }
+  const label = {
+    session_created:"Session created", session_opened:"Opened in browser", svg_uploaded:"SVG uploaded",
+    svg_replaced:"SVG replaced", chat_error:"Chat error", session_deleted:"Session deleted",
+  };
+  c.innerHTML = `<div class="panel"><div class="timeline">${events.map(e=>`
+    <div class="ev">
+      <div><b>${esc(label[e.event_type]||e.event_type)}</b> <span class="muted">&middot; ${rel(e.created_at)}</span></div>
+      <div class="muted mono" style="font-size:12px">
+        ${e.session_id?`session ${short(e.session_id,8)}… `:""}${e.visitor_id?`&middot; visitor ${short(e.visitor_id,8)}… `:""}${e.ip?`&middot; ${esc(e.ip)}`:""}
+      </div>
+      ${e.meta?`<div class="muted" style="font-size:12px">${esc(JSON.stringify(e.meta))}</div>`:""}
+    </div>`).join("")}</div></div>`;
+  $$("#content .ev").forEach((el,i) => { const ev=events[i]; if(ev.session_id) el.style.cursor="pointer", el.onclick=()=>openSession(ev.session_id); });
+}
+
+/* ---------- Drawer ---------- */
+function openDrawer(title, body) {
+  $("#drawerTitle").textContent = title;
+  $("#drawerBody").innerHTML = body;
+  $("#drawer").classList.add("open");
+  $("#overlay").classList.add("open");
+}
+function closeDrawer(){ $("#drawer").classList.remove("open"); $("#overlay").classList.remove("open"); }
+$("#drawerClose").onclick = closeDrawer;
+$("#overlay").onclick = closeDrawer;
+
+/* ---------- Boot ---------- */
+async function boot() {
+  if (!state.base || !state.token) { openSetup(); setStatus(false,"not connected"); return; }
+  try {
+    const ping = await fetch(state.base.replace(/\/$/,"") + "/admin/api/ping").then(r=>r.json());
+    if (!ping.admin_enabled) { setStatus(false,"admin disabled"); showError("Backend reachable but ADMIN_TOKEN is not set."); }
+  } catch(_) { /* render() will surface a clearer error */ }
+  await render();
+}
+boot();
+</script>
+</body>
+</html>

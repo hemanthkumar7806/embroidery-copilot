@@ -13,7 +13,11 @@ from fastapi.staticfiles import StaticFiles
 from app.api.v1.api import api_router
 from app.core.config import settings
 from app.core.logging import logger
-from app.core.middleware import LoggingContextMiddleware
+from app.core.middleware import (
+    AdminCORSMiddleware,
+    LoggingContextMiddleware,
+    VisitorContextMiddleware,
+)
 from app.services.cleanup import start_cleanup_scheduler
 from app.services.database import database_service
 from app.services.rag import rag_service
@@ -42,6 +46,7 @@ app = FastAPI(
 )
 
 app.add_middleware(LoggingContextMiddleware)
+app.add_middleware(VisitorContextMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
@@ -49,6 +54,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# Added last => outermost, so it handles the admin preflight before the strict
+# CORSMiddleware can reject the standalone dashboard's origin.
+app.add_middleware(AdminCORSMiddleware)
 
 
 @app.exception_handler(RequestValidationError)
@@ -65,6 +73,12 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
+
+# Private analytics admin API. Mounted before the "/" static mount so the
+# prefix is matched first. Auth is via X-Admin-Token (see app/api/v1/admin.py).
+from app.api.v1.admin import admin_app  # noqa: E402
+
+app.mount("/admin/api", admin_app)
 
 
 _STATIC_DIR = Path(__file__).resolve().parent.parent / "static"

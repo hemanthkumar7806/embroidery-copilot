@@ -3,6 +3,7 @@ node_modules/
 
 # Build output
 dist/
+website/downloads/*.zip
 
 # Environment / secrets
 .env

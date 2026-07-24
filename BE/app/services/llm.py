@@ -46,6 +46,15 @@ class LLMRegistry:
                 google_api_key=settings.GEMINI_API_KEY,
                 **common,
             )
+        if settings.LLM_PROVIDER == "bedrock":
+            # Imported lazily so the dependency is only needed when Bedrock is used.
+            from langchain_aws import ChatBedrockConverse
+
+            return ChatBedrockConverse(
+                model=name,
+                region_name=settings.AWS_REGION,
+                **common,
+            )
         return ChatOpenAI(
             model=name,
             api_key=settings.OPENAI_API_KEY,

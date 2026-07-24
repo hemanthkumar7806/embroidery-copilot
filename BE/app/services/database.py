@@ -10,6 +10,10 @@ from sqlmodel import SQLModel, create_engine, select
 
 from app.core.config import settings
 from app.core.logging import logger
+
+# Import analytics models so their tables are registered on SQLModel.metadata
+# before create_all() runs.
+from app.models import analytics as _analytics  # noqa: F401
 from app.models.session import Message, Session
 
 
@@ -17,25 +21,39 @@ class DatabaseService:
     """Lightweight SQLite persistence for beta sessions."""
 
     def __init__(self) -> None:
-        db_url = f"sqlite:///{settings.sqlite_path.as_posix()}"
-        # timeout => SQLite busy timeout so concurrent writers wait instead of erroring.
-        self.engine = create_engine(
-            db_url,
-            connect_args={"check_same_thread": False, "timeout": 30},
-        )
+        db_url = settings.resolved_database_url
 
-        @event.listens_for(self.engine, "connect")
-        def _set_sqlite_pragma(dbapi_conn, _record) -> None:  # noqa: ANN001
-            # WAL lets reads and writes happen concurrently (single Render worker,
-            # browser + extension hitting the DB at once).
-            cur = dbapi_conn.cursor()
-            cur.execute("PRAGMA journal_mode=WAL")
-            cur.execute("PRAGMA synchronous=NORMAL")
-            cur.execute("PRAGMA busy_timeout=30000")
-            cur.close()
+        if settings.db_is_sqlite:
+            # timeout => SQLite busy timeout so concurrent writers wait instead of erroring.
+            self.engine = create_engine(
+                db_url,
+                connect_args={"check_same_thread": False, "timeout": 30},
+            )
+
+            @event.listens_for(self.engine, "connect")
+            def _set_sqlite_pragma(dbapi_conn, _record) -> None:  # noqa: ANN001
+                # WAL lets reads and writes happen concurrently (single worker,
+                # browser + extension hitting the DB at once).
+                cur = dbapi_conn.cursor()
+                cur.execute("PRAGMA journal_mode=WAL")
+                cur.execute("PRAGMA synchronous=NORMAL")
+                cur.execute("PRAGMA busy_timeout=30000")
+                cur.close()
+        else:
+            # Managed Postgres (e.g. Supabase). pool_pre_ping drops stale
+            # connections; pool_recycle avoids server-side idle timeouts.
+            self.engine = create_engine(
+                db_url,
+                pool_pre_ping=True,
+                pool_recycle=300,
+            )
 
         SQLModel.metadata.create_all(self.engine)
-        logger.info("database_initialized", path=str(settings.sqlite_path))
+        logger.info(
+            "database_initialized",
+            backend="sqlite" if settings.db_is_sqlite else "postgres",
+            path=str(settings.sqlite_path) if settings.db_is_sqlite else "external",
+        )
 
     def init_db(self) -> None:
         SQLModel.metadata.create_all(self.engine)
@@ -68,6 +86,10 @@ class DatabaseService:
                 last_active_at=now,
             )
             db.add(row)
+            # Flush the session INSERT before the message so the FK is satisfied.
+            # There is no ORM relationship, so SQLAlchemy won't order these on its
+            # own; Postgres (unlike SQLite) enforces the foreign key.
+            db.flush()
             db.add(
                 Message(
                     session_id=session_id,

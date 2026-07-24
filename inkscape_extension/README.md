@@ -1,17 +1,29 @@
 # Inkscape AI — Send to AI Assistant
 
-Minimal Inkscape extension for the **Inkscape AI beta**: one menu click uploads the current SVG to the backend and opens the chat UI in your browser.
+One click from Inkscape → browser opens with your current design loaded and chat ready.
 
 ```
-Inkscape (Save) → Extensions → Inkscape AI → Send to AI Assistant
-                           → POST /api/v1/sessions → open /?s=<session_id>
+Extensions → Inkscape AI → Send to AI Assistant
 ```
 
-This is intentionally tiny (one `.inx` + ~120-line Python file, stdlib only). It is **not** the MCP bridge in `../inkspace-AI/` — that project is separate.
+No settings dialog. No URL fields.
 
-## Install
+## Before first use
 
-Copy both files into Inkscape's user extensions directory:
+1. **Start the backend** (from `BE/`):
+   ```bash
+   uv run python -m uvicorn app.main:app --port 8000
+   ```
+2. **Build the web UI once** (from `FE/`):
+   ```bash
+   npm install
+   npm run build
+   ```
+   The UI is served at `http://localhost:8000` by the backend.
+
+## Install the extension
+
+Copy into Inkscape's user extensions folder:
 
 | OS      | Path                                                            |
 | ------- | --------------------------------------------------------------- |
@@ -19,55 +31,40 @@ Copy both files into Inkscape's user extensions directory:
 | macOS   | `~/Library/Application Support/inkscape/extensions/InkscapeAI/` |
 | Linux   | `~/.config/inkscape/extensions/InkscapeAI/`                     |
 
-Files to copy:
+Files:
 
 - `send_to_ai.inx`
 - `send_to_ai.py`
 
-Restart Inkscape. The command appears at **Extensions → Inkscape AI → Send to AI Assistant**.
+Restart Inkscape.
 
-## Configure
+## What happens on click
 
-The extension talks to the backend over HTTP. By default it targets `http://localhost:8000`.
+1. Extension reads your current SVG (saved file or in-memory)
+2. Uploads to `http://localhost:8000`
+3. Opens `http://localhost:8000/?s=<session_id>` in your browser
+4. Web app shows preview, preflight findings, and welcome chat
 
-To point at a hosted instance, set the environment variable **before launching Inkscape**:
-
-```powershell
-# Windows (PowerShell, session-scoped)
-$env:INKSCAPE_AI_BASE_URL = "https://your-host.example.com"
-inkscape
-```
-
-```bash
-# Linux / macOS
-export INKSCAPE_AI_BASE_URL="https://your-host.example.com"
-inkscape
-```
-
-| Variable               | Default                 | Notes                                                |
-| ---------------------- | ----------------------- | ---------------------------------------------------- |
-| `INKSCAPE_AI_BASE_URL` | `http://localhost:8000` | Backend root (no trailing slash). Used for both API calls and the browser URL. |
-
-## Usage
-
-1. Start the backend:
-   ```bash
-   cd BE
-   uv run python -m uvicorn app.main:app --port 8000
-   ```
-2. Open or create an SVG in Inkscape (saving to disk is preferred but **not required** — unsaved documents are serialized from memory).
-3. Run **Extensions → Inkscape AI → Send to AI Assistant**.
-4. The default browser opens at `<base_url>/?s=<session_id>` with the preflight report and a chat panel.
+Re-clicking on the **same saved file** updates that session (chat history kept). A small sidecar file `your-design.svg.inkscape-ai.json` stores the session id next to the SVG.
 
 ## Troubleshooting
 
-| Symptom                                  | Fix                                                                            |
-| ---------------------------------------- | ------------------------------------------------------------------------------ |
-| "Could not reach backend at …"           | Backend is not running, or `INKSCAPE_AI_BASE_URL` points at the wrong host.    |
-| "Backend rejected upload (413: …)"       | SVG is over the per-session size cap (5 MB by default — see `BE/app/core/config.py:MAX_SVG_BYTES`). |
-| "Backend rejected upload (400: …)"       | File extension is not `.svg`. Save the document as SVG first.                  |
-| Browser did not open                     | URL is shown in the Inkscape dialog — copy it manually.                        |
-| Extension not in menu                    | Files in the wrong folder, or Inkscape was not restarted after install.        |
+| Symptom | Fix |
+| ------- | --- |
+| "Backend is not reachable" | Start uvicorn on port 8000 |
+| Browser opens but page is blank | Run `npm run build` in `FE/` |
+| Still see URL / Live preview dialog | Stale extension files — recopy from repo and restart Inkscape |
+| Browser did not open | Copy URL from the Inkscape message dialog |
+
+## Advanced (optional)
+
+Set `INKSCAPE_AI_BASE_URL` before launching Inkscape to point at a hosted backend instead of localhost.
+
+## Smoke test
+
+```bash
+python inkscape_extension/tests/smoke_test.py
+```
 
 ## License
 
