@@ -27,10 +27,20 @@ class RuleIssueOut(BaseModel):
     suggested_action: str
     source: str
     confidence: float | None = None
+    # Capability tier: "auto_fix" (🟢) / "guided" (🟡) / "recommendation" (🔵).
+    capability: str = "recommendation"
+    # Structured auto-fix operation for 🟢 issues (op/attribute/value/target_ids/summary).
+    fix: dict[str, Any] | None = None
     group: str | None = None
     element_ids: list[str] = Field(default_factory=list)
     focus_bbox: dict[str, float] | None = None
+    # Per-shape breakdown: one entry per affected element_id, each with its own tight
+    # focus_bbox and (for 🟢 issues) its own single-target fix — lets the UI zoom to and
+    # fix one shape at a time instead of only the group as a whole.
+    instances: list[dict[str, Any]] = Field(default_factory=list)
     evidence: dict[str, Any] | None = None
+    # Documentation citations backing this finding (AI review findings only).
+    sources: list[Source] = Field(default_factory=list)
 
 
 class RuleDecisionOut(BaseModel):
@@ -68,6 +78,25 @@ class SessionDetailResponse(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=4000)
+
+
+class SetContextRequest(BaseModel):
+    """Explicitly set project context (fabric/garment/hoop) for a session."""
+
+    fabric_type: Optional[str] = None
+    garment_type: Optional[str] = None
+    hoop_size_mm: Optional[dict[str, float]] = None
+
+
+class SetContextResponse(BaseModel):
+    session_context: dict[str, Any] = Field(default_factory=dict)
+    rule_engine: RuleEngineOut | None = None
+
+
+class AiReviewResponse(BaseModel):
+    rule_engine: RuleEngineOut | None = None
+    ai_reviewed: bool = True
+    ai_count: int = 0
 
 
 class ChatResponse(BaseModel):
@@ -136,10 +165,14 @@ def rule_engine_from_dict(payload: dict[str, Any] | None) -> RuleEngineOut | Non
             suggested_action=issue.get("suggested_action", ""),
             source=issue.get("source", ""),
             confidence=issue.get("confidence"),
+            capability=issue.get("capability", "recommendation"),
+            fix=issue.get("fix"),
             group=issue.get("group"),
             element_ids=list(issue.get("element_ids") or []),
             focus_bbox=issue.get("focus_bbox"),
+            instances=list(issue.get("instances") or []),
             evidence=issue.get("evidence"),
+            sources=[Source(**s) for s in (issue.get("sources") or []) if isinstance(s, dict)],
         )
         for issue in payload.get("issues") or []
     ]
@@ -153,10 +186,14 @@ def rule_engine_from_dict(payload: dict[str, Any] | None) -> RuleEngineOut | Non
             suggested_action=issue.get("suggested_action", ""),
             source=issue.get("source", ""),
             confidence=issue.get("confidence"),
+            capability=issue.get("capability", "recommendation"),
+            fix=issue.get("fix"),
             group=issue.get("group"),
             element_ids=list(issue.get("element_ids") or []),
             focus_bbox=issue.get("focus_bbox"),
+            instances=list(issue.get("instances") or []),
             evidence=issue.get("evidence"),
+            sources=[Source(**s) for s in (issue.get("sources") or []) if isinstance(s, dict)],
         )
         for issue in payload.get("context_gaps") or []
     ]

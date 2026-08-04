@@ -26,6 +26,27 @@ structure_rules: list[Rule] = [
         ),
     ),
     Rule(
+        id="no_inkstitch_attributes_found",
+        category="structure",
+        severity="low",
+        confidence=0.95,
+        fields=["structure.element_count", "structure.has_inkstitch_params"],
+        title="No Ink/Stitch attributes found",
+        source="Ink/Stitch params model — shapes need inkstitch: attributes to be a configured embroidery design",
+        suggested_action=(
+            "If you intend to stitch this, select the shapes and set params via "
+            "Extensions > Ink/Stitch > Params"
+        ),
+        check=lambda report: (
+            report.structure.get("element_count", 0) > 0
+            and not report.structure.get("has_inkstitch_params")
+        ),
+        detail=lambda _report: (
+            "None of the shapes carry explicit Ink/Stitch parameters — this looks like a "
+            "standard SVG that hasn't been prepared for embroidery yet, not an error."
+        ),
+    ),
+    Rule(
         id="hidden_layers_present",
         category="structure",
         severity="medium",

@@ -217,6 +217,43 @@ def test_fill_on_narrow_path_fires():
     assert any(issue["id"] == "fill_on_narrow_path" for issue in result["issues"])
 
 
+def test_no_inkstitch_attributes_found_fires_for_plain_svg():
+    """A design with visible shapes but zero explicit inkstitch: attributes on any of
+    them (svg_parser still infers a default fill/stroke stitch_type for bare shapes,
+    so `stitch_types` alone can't detect this) should surface as a low-severity,
+    non-error note — not silently pass through as if it were digitized."""
+    bridge = {
+        "elements": [
+            {"id": "shape1", "stitch_type": "fill", "params": {}, "node_count": 10},
+            {"id": "shape2", "stitch_type": "stroke", "params": {}, "node_count": 5},
+        ],
+        "summary": {"hidden_layer_count": 0, "open_path_count": 0},
+    }
+    result = run(bridge)
+    issue = next(
+        (item for item in result["issues"] if item["id"] == "no_inkstitch_attributes_found"),
+        None,
+    )
+    assert issue is not None
+    assert issue["severity"] == "low"
+
+
+def test_no_inkstitch_attributes_found_does_not_fire_when_params_present():
+    bridge = {
+        "elements": [
+            {
+                "id": "shape1",
+                "stitch_type": "fill",
+                "params": {"row_spacing_mm": 0.4},
+                "node_count": 10,
+            },
+        ],
+        "summary": {"hidden_layer_count": 0, "open_path_count": 0},
+    }
+    result = run(bridge)
+    assert not any(item["id"] == "no_inkstitch_attributes_found" for item in result["issues"])
+
+
 def test_symptom_boost_increases_confidence():
     report = _minimal_report(
         meta={"symptom": "save_or_simulator_freeze"},

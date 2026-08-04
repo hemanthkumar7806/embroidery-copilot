@@ -1,5 +1,5 @@
 #!/bin/sh
-# Inkscape AI - extension one-click installer (Linux)
+# StitchBase - extension one-click installer (Linux)
 # Copies the extension, verifies it, checks if Inkscape is running, pings the
 # live service (informational), and shows a native popup with the result.
 
@@ -11,22 +11,22 @@ popup() {
   # $1 = message, $2 = "ok" or "err"
   if command -v zenity >/dev/null 2>&1; then
     if [ "$2" = "err" ]; then
-      zenity --error --title="Inkscape AI" --text="$1" >/dev/null 2>&1
+      zenity --error --title="StitchBase" --text="$1" >/dev/null 2>&1
     else
-      zenity --info --title="Inkscape AI" --text="$1" >/dev/null 2>&1
+      zenity --info --title="StitchBase" --text="$1" >/dev/null 2>&1
     fi
   elif command -v kdialog >/dev/null 2>&1; then
     if [ "$2" = "err" ]; then
-      kdialog --title "Inkscape AI" --error "$1" >/dev/null 2>&1
+      kdialog --title "StitchBase" --error "$1" >/dev/null 2>&1
     else
-      kdialog --title "Inkscape AI" --msgbox "$1" >/dev/null 2>&1
+      kdialog --title "StitchBase" --msgbox "$1" >/dev/null 2>&1
     fi
   else
     printf '\n%s\n\n' "$1"
   fi
 }
 
-echo "Installing Inkscape AI extension..."
+echo "Installing StitchBase extension..."
 
 ok=1
 mkdir -p "$DEST" 2>/dev/null || ok=0
@@ -68,7 +68,7 @@ $DEST
 $restart_line
 
 Then use:
-   Extensions > Inkscape AI > Send to AI Assistant
+   Extensions > StitchBase > Open in StitchBase
 
 $service_line"
 echo "$msg"

@@ -107,19 +107,23 @@ async def generate_chat_reply(
             "If they pasted a troubleshooting story, explain likely causes (complexity, narrow fills, "
             "too many nodes, wrong stitch type) and ask them to upload their SVG for a file-specific check."
         )
-    elif is_first_user_turn and not wants_preflight:
-        flow_instruction = (
-            "\n\nThis is the user's FIRST message after the welcome. "
-            "Ask clarifying questions (intent + fabric/garment). Do NOT output a full preflight checklist yet."
-        )
     elif wants_preflight:
         flow_instruction = (
             "\n\nThe user requested a preflight check. Use the formal preflight section structure."
         )
     elif describes_symptom:
         flow_instruction = (
-            "\n\nThe user described a stitch-out symptom. Troubleshoot conversationally using "
-            "rule_engine issues that match the symptom and RAG docs. Skip context_gaps."
+            "\n\nThe user described a stitch-out symptom. Apply diagnosis discipline: synthesize the "
+            "rule_engine issues that match this symptom (plus RAG docs) into the primary root cause, not "
+            "a list of every finding that fired. Keep specific rule/element IDs to an optional closing "
+            "technical note. Do not ask about fabric/garment/hoop first, they don't change this diagnosis. "
+            "Ask at most one follow-up question, and only if the answer would change the diagnosis or "
+            "recommendation. Skip context_gaps."
+        )
+    elif is_first_user_turn:
+        flow_instruction = (
+            "\n\nThis is the user's FIRST message after the welcome. "
+            "Ask clarifying questions (intent + fabric/garment). Do NOT output a full preflight checklist yet."
         )
 
     messages: list = [

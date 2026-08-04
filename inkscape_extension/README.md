@@ -1,9 +1,11 @@
-# Inkscape AI — Send to AI Assistant
+# StitchBase
+
+_AI Design Review for Ink/Stitch_
 
 One click from Inkscape → browser opens with your current design loaded and chat ready.
 
 ```
-Extensions → Inkscape AI → Send to AI Assistant
+Extensions → StitchBase → Open in StitchBase
 ```
 
 No settings dialog. No URL fields.

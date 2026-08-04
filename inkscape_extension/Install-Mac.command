@@ -1,5 +1,5 @@
 #!/bin/sh
-# Inkscape AI - extension one-click installer (macOS)
+# StitchBase - extension one-click installer (macOS)
 # Copies the extension, verifies it, checks if Inkscape is running, pings the
 # live service (informational), and shows a native popup with the result.
 
@@ -16,13 +16,13 @@ popup() {
   icon="note"
   [ "$2" = "err" ] && icon="stop"
   if command -v osascript >/dev/null 2>&1; then
-    osascript -e "display dialog \"$1\" buttons {\"OK\"} default button \"OK\" with title \"Inkscape AI\" with icon $icon" >/dev/null 2>&1
+    osascript -e "display dialog \"$1\" buttons {\"OK\"} default button \"OK\" with title \"StitchBase\" with icon $icon" >/dev/null 2>&1
   else
     printf '\n%s\n\n' "$1"
   fi
 }
 
-echo "Installing Inkscape AI extension..."
+echo "Installing StitchBase extension..."
 
 ok=1
 mkdir -p "$DEST" 2>/dev/null || ok=0
@@ -64,7 +64,7 @@ $DEST
 $restart_line
 
 Then use:
-   Extensions > Inkscape AI > Send to AI Assistant
+   Extensions > StitchBase > Open in StitchBase
 
 $service_line"
 echo "$msg"

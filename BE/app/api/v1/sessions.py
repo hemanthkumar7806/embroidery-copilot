@@ -12,17 +12,32 @@ from app.core.config import settings
 from app.core.logging import logger
 from app.services import analytics
 from app.schemas.sessions import (
+    AiReviewResponse,
     ChatMessage,
     ChatRequest,
     ChatResponse,
     CreateSessionResponse,
     PreflightReport,
     SessionDetailResponse,
+    SetContextRequest,
+    SetContextResponse,
     Source,
     rule_engine_from_dict,
     sources_from_chunks,
     sources_to_json,
 )
+from app.services.ai_review import run_ai_review
+from app.services.context_extractor import SessionContext, apply_context_to_report
+from app.schemas.agent import (
+    AckCommandRequest,
+    BatchApplyRequest,
+    BatchOut,
+    CommandOut,
+    EnqueueCommandRequest,
+    command_to_out,
+)
+from app.services import agent_ops
+from app.services.agent_ops import OpValidationError
 from app.services.chat_service import generate_chat_reply
 from app.services.database import database_service
 from app.services.issue_element_mapper import enrich_rule_engine_payload
@@ -133,11 +148,20 @@ async def create_chat_session(request: Request) -> CreateSessionResponse:
 
 @router.post("", response_model=CreateSessionResponse)
 async def create_session(request: Request, svg_file: UploadFile = File(...)) -> CreateSessionResponse:
+    ip = getattr(request.state, "client_ip", None)
     if not svg_file.filename or not svg_file.filename.lower().endswith(".svg"):
+        analytics.record_event(
+            "upload_rejected", ip=ip,
+            meta={"stage": "create", "reason": "invalid_extension", "filename": svg_file.filename},
+        )
         raise HTTPException(status_code=400, detail="Upload must be an .svg file.")
 
     raw = await svg_file.read()
     if len(raw) > settings.MAX_SVG_BYTES:
+        analytics.record_event(
+            "upload_rejected", ip=ip,
+            meta={"stage": "create", "reason": "too_large", "filename": svg_file.filename, "bytes": len(raw)},
+        )
         raise HTTPException(status_code=413, detail=f"SVG exceeds {settings.MAX_SVG_BYTES} bytes.")
 
     started = time.perf_counter()
@@ -179,7 +203,6 @@ async def create_session(request: Request, svg_file: UploadFile = File(...)) -> 
     # Uploads arrive server-side from the extension (no browser cookie), so the
     # visitor is linked later when the browser opens the session. Capture the
     # user's IP/UA and the full SVG for permanent analytics here.
-    ip = getattr(request.state, "client_ip", None)
     ua = getattr(request.state, "user_agent", None)
     width_mm, height_mm, element_count = _svg_summary(design_report)
     rule_status, issue_count, top_issues = analytics.summarize_rules(rules_payload)
@@ -292,6 +315,161 @@ async def chat_session(session_id: str, body: ChatRequest, request: Request) -> 
     )
 
 
+@router.post("/{session_id}/context", response_model=SetContextResponse)
+async def set_session_context(session_id: str, body: SetContextRequest) -> SetContextResponse:
+    """Set fabric/garment/hoop context, re-run analysis, and persist.
+
+    Fabric-aware auto-fix values depend on this. Mirrors the context path in
+    chat_service.generate_chat_reply, but from an explicit structured input.
+    """
+    row = database_service.get_session(session_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Session not found or expired.")
+
+    design_report = json.loads(row.design_report_json)
+    # Preserve any existing AI findings — re-running the rules for a fabric change must not
+    # wipe the LLM review's 🟡/🔵 findings.
+    prior_ai = [
+        issue
+        for issue in ((design_report.get("cached_rule_engine") or {}).get("issues") or [])
+        if isinstance(issue, dict) and issue.get("source") == "ai"
+    ]
+    apply_context_to_report(
+        design_report,
+        SessionContext(
+            fabric_type=body.fabric_type,
+            garment_type=body.garment_type,
+            hoop_size_mm=body.hoop_size_mm,
+        ),
+    )
+    # An explicit pick always wins: apply_context_to_report keeps an already-set physical
+    # fabric, but the picker is authoritative — force it so presets/rules use the new value.
+    if body.fabric_type:
+        design_report.setdefault("physical", {})["fabric_type"] = body.fabric_type
+
+    rules_payload = await run_in_threadpool(_build_rules_payload, design_report)
+    if prior_ai:
+        rules_payload["issues"] = list(rules_payload.get("issues") or []) + prior_ai
+    design_report["cached_rule_engine"] = rules_payload
+    await run_in_threadpool(
+        database_service.update_design_report, session_id, design_report_to_json(design_report)
+    )
+    analytics.record_event(
+        "fabric_set", session_id=session_id, meta={"fabric_type": body.fabric_type}
+    )
+    return SetContextResponse(
+        session_context=design_report.get("session_context") or {},
+        rule_engine=rule_engine_from_dict(rules_payload),
+    )
+
+
+@router.post("/{session_id}/ai-review", response_model=AiReviewResponse)
+async def ai_review(session_id: str, request: Request) -> AiReviewResponse:
+    """Run the LLM 'senior digitizer' review; merge its 🟡/🔵 findings into the report.
+
+    Auto-triggered by the web app after upload (non-blocking). Idempotent: re-running
+    replaces prior AI findings rather than stacking them.
+    """
+    row = database_service.get_session(session_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Session not found or expired.")
+
+    design_report = json.loads(row.design_report_json)
+    rules_payload = design_report.get("cached_rule_engine")
+    if not isinstance(rules_payload, dict) or "issues" not in rules_payload:
+        rules_payload = await run_in_threadpool(_build_rules_payload, design_report)
+
+    # Idempotent: drop any previous AI findings before adding fresh ones.
+    rules_payload["issues"] = [
+        issue
+        for issue in (rules_payload.get("issues") or [])
+        if isinstance(issue, dict) and issue.get("source") != "ai"
+    ]
+
+    svg_path = settings.DATA_DIR / "svgs" / f"{session_id}.svg"
+    svg_bytes = svg_path.read_bytes() if svg_path.exists() else None
+    ai_findings = await run_ai_review(design_report, rules_payload, svg_bytes)
+    rules_payload["issues"] = list(rules_payload.get("issues") or []) + ai_findings
+
+    design_report["cached_rule_engine"] = rules_payload
+    await run_in_threadpool(
+        database_service.update_design_report, session_id, design_report_to_json(design_report)
+    )
+    analytics.record_event(
+        "ai_review_run",
+        session_id=session_id,
+        ip=getattr(request.state, "client_ip", None),
+        meta={"count": len(ai_findings)},
+    )
+    return AiReviewResponse(
+        rule_engine=rule_engine_from_dict(rules_payload),
+        ai_reviewed=True,
+        ai_count=len(ai_findings),
+    )
+
+
+@router.post("/{session_id}/rescan", response_model=SetContextResponse)
+async def rescan_session(
+    session_id: str, request: Request, svg_file: UploadFile = File(...)
+) -> SetContextResponse:
+    """Silently re-analyze the current live document (agent re-export) — the Verify loop.
+
+    Unlike /svg this adds no welcome message and no chat noise. It merges the stored fabric
+    context and preserves prior AI findings, so a Verify only updates deterministic findings.
+    """
+    row = database_service.get_session(session_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Session not found or expired.")
+    ip = getattr(request.state, "client_ip", None)
+    if not svg_file.filename or not svg_file.filename.lower().endswith(".svg"):
+        analytics.record_event(
+            "upload_rejected", session_id=session_id, ip=ip,
+            meta={"stage": "rescan", "reason": "invalid_extension", "filename": svg_file.filename},
+        )
+        raise HTTPException(status_code=400, detail="Upload must be an .svg file.")
+
+    raw = await svg_file.read()
+    if len(raw) > settings.MAX_SVG_BYTES:
+        analytics.record_event(
+            "upload_rejected", session_id=session_id, ip=ip,
+            meta={"stage": "rescan", "reason": "too_large", "filename": svg_file.filename, "bytes": len(raw)},
+        )
+        raise HTTPException(status_code=413, detail=f"SVG exceeds {settings.MAX_SVG_BYTES} bytes.")
+
+    old_report = json.loads(row.design_report_json)
+    stored_ctx = SessionContext.from_dict(old_report.get("session_context"))
+    prior_ai = [
+        issue
+        for issue in ((old_report.get("cached_rule_engine") or {}).get("issues") or [])
+        if isinstance(issue, dict) and issue.get("source") == "ai"
+    ]
+    doc_name = (old_report.get("summary") or {}).get("document_name") or svg_file.filename
+
+    svg_path = settings.DATA_DIR / "svgs" / f"{session_id}.svg"
+    await run_in_threadpool(svg_path.write_bytes, raw)
+
+    def _reanalyze() -> tuple[dict, dict]:
+        report = build_design_report(raw, document_name=doc_name)
+        apply_context_to_report(report, stored_ctx)
+        if stored_ctx.fabric_type:
+            report.setdefault("physical", {})["fabric_type"] = stored_ctx.fabric_type
+        payload = _build_rules_payload(report)
+        if prior_ai:
+            payload["issues"] = list(payload.get("issues") or []) + prior_ai
+        report["cached_rule_engine"] = payload
+        return report, payload
+
+    design_report, rules_payload = await run_in_threadpool(_reanalyze)
+    await run_in_threadpool(
+        database_service.update_design_report, session_id, design_report_to_json(design_report)
+    )
+    analytics.record_event("rescan", session_id=session_id, ip=ip)
+    return SetContextResponse(
+        session_context=design_report.get("session_context") or {},
+        rule_engine=rule_engine_from_dict(rules_payload),
+    )
+
+
 @router.post("/{session_id}/svg", response_model=CreateSessionResponse)
 async def upload_session_svg(
     session_id: str, request: Request, svg_file: UploadFile = File(...)
@@ -301,11 +479,20 @@ async def upload_session_svg(
     if not row:
         raise HTTPException(status_code=404, detail="Session not found or expired.")
 
+    ip = getattr(request.state, "client_ip", None)
     if not svg_file.filename or not svg_file.filename.lower().endswith(".svg"):
+        analytics.record_event(
+            "upload_rejected", session_id=session_id, ip=ip,
+            meta={"stage": "replace", "reason": "invalid_extension", "filename": svg_file.filename},
+        )
         raise HTTPException(status_code=400, detail="Upload must be an .svg file.")
 
     raw = await svg_file.read()
     if len(raw) > settings.MAX_SVG_BYTES:
+        analytics.record_event(
+            "upload_rejected", session_id=session_id, ip=ip,
+            meta={"stage": "replace", "reason": "too_large", "filename": svg_file.filename, "bytes": len(raw)},
+        )
         raise HTTPException(status_code=413, detail=f"SVG exceeds {settings.MAX_SVG_BYTES} bytes.")
 
     svg_path = settings.DATA_DIR / "svgs" / f"{session_id}.svg"
@@ -322,12 +509,12 @@ async def upload_session_svg(
     )
 
     await run_in_threadpool(database_service.update_design_report, session_id, design_report_json)
-    await run_in_threadpool(
-        database_service.add_message, session_id, "assistant", welcome_content, "[]"
-    )
+    if welcome_content:
+        await run_in_threadpool(
+            database_service.add_message, session_id, "assistant", welcome_content, "[]"
+        )
     logger.info("session_svg_uploaded", session_id=session_id, filename=svg_file.filename)
 
-    ip = getattr(request.state, "client_ip", None)
     width_mm, height_mm, element_count = _svg_summary(design_report)
     rule_status, issue_count, top_issues = analytics.summarize_rules(rules_payload)
     analytics.update_session_svg(
@@ -366,3 +553,159 @@ async def delete_session(session_id: str, request: Request) -> dict[str, str]:
         ip=getattr(request.state, "client_ip", None),
     )
     return {"message": "Session deleted."}
+
+
+# --------------------------------------------------------------------------- #
+# Agent command queue + AI action history
+#
+# The web app enqueues commands; the local agent polls /pending, executes them via
+# Inkscape actions, and posts /ack with results and before-values. The session id in
+# the path is the capability token — there is no inbound listener on the user's machine.
+# --------------------------------------------------------------------------- #
+
+
+def _require_session(session_id: str):
+    row = database_service.get_session(session_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Session not found or expired.")
+    return row
+
+
+def _summarize_batches(rows: list) -> list[BatchOut]:
+    groups: dict[str, list] = {}
+    for cmd in rows:
+        if cmd.batch_id:
+            groups.setdefault(cmd.batch_id, []).append(cmd)
+    out: list[BatchOut] = []
+    for batch_id, cmds in groups.items():
+        cmds.sort(key=lambda c: c.created_at)
+        kind = cmds[0].kind
+        revertable = kind != "revert" and any(
+            c.kind == "apply" and c.status == "done" and c.before_json for c in cmds
+        )
+        out.append(
+            BatchOut(
+                batch_id=batch_id,
+                kind=kind,
+                total=len(cmds),
+                done=sum(1 for c in cmds if c.status == "done"),
+                failed=sum(1 for c in cmds if c.status == "failed"),
+                pending=sum(1 for c in cmds if c.status == "pending"),
+                revertable=revertable,
+                created_at=cmds[0].created_at,
+            )
+        )
+    out.sort(key=lambda b: b.created_at, reverse=True)
+    return out
+
+
+@router.post("/{session_id}/commands", response_model=CommandOut)
+async def enqueue_command(session_id: str, body: EnqueueCommandRequest) -> CommandOut:
+    _require_session(session_id)
+    try:
+        agent_ops.validate_command(body.kind, body.payload)
+    except OpValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    cmds = await run_in_threadpool(
+        database_service.enqueue_commands,
+        session_id,
+        [{"kind": body.kind, "issue_id": body.issue_id, "payload": body.payload}],
+        None,
+    )
+    return command_to_out(cmds[0])
+
+
+@router.post("/{session_id}/commands/batch", response_model=list[CommandOut])
+async def enqueue_command_batch(session_id: str, body: BatchApplyRequest) -> list[CommandOut]:
+    """Enqueue many 🟢 fixes as one named batch (for 'Fix all 🟢' + Revert Batch)."""
+    _require_session(session_id)
+    if not body.fixes:
+        raise HTTPException(status_code=400, detail="No fixes provided.")
+    try:
+        for item in body.fixes:
+            agent_ops.validate_apply_payload(item.payload)
+    except OpValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    batch_id = str(uuid.uuid4())
+    items = [{"kind": "apply", "issue_id": f.issue_id, "payload": f.payload} for f in body.fixes]
+    cmds = await run_in_threadpool(database_service.enqueue_commands, session_id, items, batch_id)
+    return [command_to_out(c) for c in cmds]
+
+
+@router.get("/{session_id}/commands/pending", response_model=list[CommandOut])
+async def poll_commands(session_id: str) -> list[CommandOut]:
+    """Agent poll: pending commands, oldest first."""
+    _require_session(session_id)
+    cmds = await run_in_threadpool(database_service.pending_commands, session_id)
+    return [command_to_out(c) for c in cmds]
+
+
+@router.post("/{session_id}/commands/{command_id}/ack", response_model=CommandOut)
+async def ack_command(session_id: str, command_id: str, body: AckCommandRequest) -> CommandOut:
+    """Agent ack: report done/failed + before-values (for revert) + result."""
+    cmd = database_service.get_command(command_id)
+    if not cmd or cmd.session_id != session_id:
+        raise HTTPException(status_code=404, detail="Command not found.")
+    if body.status not in ("done", "failed"):
+        raise HTTPException(status_code=400, detail="status must be 'done' or 'failed'.")
+    updated = await run_in_threadpool(
+        database_service.ack_command, command_id, body.status, body.before, body.result
+    )
+    # Funnel signal: a successfully applied fix is the clearest sign of automation appetite.
+    if cmd.kind == "apply" and body.status == "done":
+        analytics.record_event(
+            "fix_applied", session_id=session_id, meta={"issue_id": cmd.issue_id}
+        )
+    return command_to_out(updated)
+
+
+@router.get("/{session_id}/commands/{command_id}", response_model=CommandOut)
+async def get_command(session_id: str, command_id: str) -> CommandOut:
+    """Fetch one command's status/result (web UI polls this after Apply)."""
+    cmd = database_service.get_command(command_id)
+    if not cmd or cmd.session_id != session_id:
+        raise HTTPException(status_code=404, detail="Command not found.")
+    return command_to_out(cmd)
+
+
+@router.post("/{session_id}/commands/{command_id}/revert", response_model=list[CommandOut])
+async def revert_command(session_id: str, command_id: str) -> list[CommandOut]:
+    """Undo a single applied fix by enqueueing its inverse (restores before-values)."""
+    cmd = database_service.get_command(command_id)
+    if not cmd or cmd.session_id != session_id:
+        raise HTTPException(status_code=404, detail="Command not found.")
+    items = agent_ops.inverse_items([cmd])
+    if not items:
+        raise HTTPException(status_code=400, detail="This fix cannot be undone.")
+    created = await run_in_threadpool(database_service.enqueue_commands, session_id, items, None)
+    # Funnel signal: mirrors the "fix_applied" event in ack_command, but for undo.
+    analytics.record_event(
+        "fix_reverted", session_id=session_id, meta={"issue_id": cmd.issue_id}
+    )
+    return [command_to_out(c) for c in created]
+
+
+@router.get("/{session_id}/batches", response_model=list[BatchOut])
+async def list_batches(session_id: str) -> list[BatchOut]:
+    """AI action history: batches, newest first, with revert availability."""
+    _require_session(session_id)
+    rows = await run_in_threadpool(database_service.list_batches, session_id)
+    return _summarize_batches(rows)
+
+
+@router.post("/{session_id}/batches/{batch_id}/revert", response_model=list[CommandOut])
+async def revert_batch(session_id: str, batch_id: str) -> list[CommandOut]:
+    """Revert a whole AI batch by enqueueing synthesized inverse ops as a new batch."""
+    _require_session(session_id)
+    cmds = await run_in_threadpool(database_service.batch_commands, session_id, batch_id)
+    if not cmds:
+        raise HTTPException(status_code=404, detail="Batch not found.")
+    items = agent_ops.inverse_items(cmds)
+    if not items:
+        raise HTTPException(status_code=400, detail="Nothing in this batch can be reverted.")
+    new_batch = str(uuid.uuid4())
+    created = await run_in_threadpool(database_service.enqueue_commands, session_id, items, new_batch)
+    analytics.record_event(
+        "fix_reverted", session_id=session_id, meta={"batch_id": batch_id, "count": len(items)}
+    )
+    return [command_to_out(c) for c in created]

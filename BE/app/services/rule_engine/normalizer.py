@@ -157,6 +157,11 @@ def normalize_design_report(bridge: dict[str, Any]) -> DesignReport:
         if stitch == "fill" and min_dim is not None and min_dim < FILL_MIN_WIDTH_MM:
             narrow_fill_count += 1
 
+    # Shapes get a default stitch type inferred from fill/stroke even with zero explicit
+    # inkstitch: attributes (see svg_parser._infer_stitch_type), so `stitch_types` alone can't
+    # tell a digitized design apart from a plain, never-configured SVG. This does.
+    has_inkstitch_params = any(bool(element.get("params")) for element in valid_elements)
+
     session_ctx = bridge.get("session_context") if isinstance(bridge.get("session_context"), dict) else {}
     physical_src = bridge.get("physical") if isinstance(bridge.get("physical"), dict) else {}
     fabric_type = physical_src.get("fabric_type") or session_ctx.get("fabric_type")
@@ -206,6 +211,7 @@ def normalize_design_report(bridge: dict[str, Any]) -> DesignReport:
             "stitch_types": stitch_types,
             "element_count": len(valid_elements),
             "narrow_fill_count": narrow_fill_count,
+            "has_inkstitch_params": has_inkstitch_params,
         },
         routing={
             "jump_stitch_count": None,

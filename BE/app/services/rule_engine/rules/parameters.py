@@ -2,15 +2,36 @@
 
 from __future__ import annotations
 
+from app.services.fabric_presets import DEFAULT as DEFAULT_PRESET
+from app.services.fabric_presets import FabricPreset, preset_for
 from app.services.rule_engine.config import (
     EXTREME_EXPAND_MM,
     PULL_COMP_STRETCHY_MIN_MM,
-    ROW_SPACING_TOO_HIGH_MM,
     RUNNING_MIN_STITCH_LENGTH_MM,
     SATIN_MIN_STITCH_LENGTH_MM,
     STRETCHY_FABRICS,
 )
 from app.services.rule_engine.types import DesignReport, Rule
+
+
+def _density_preset(report: DesignReport) -> FabricPreset:
+    return preset_for(report.physical.get("fabric_type"))
+
+
+def _density_detail(report: DesignReport, too_sparse: bool) -> str:
+    row_spacing = report.parameters.get("row_spacing_mm")
+    preset = _density_preset(report)
+    for_fabric = f" for {preset.label}" if preset is not DEFAULT_PRESET else ""
+    band = f"{preset.row_spacing_min_mm:g}–{preset.row_spacing_max_mm:g}mm"
+    if too_sparse:
+        return (
+            f"Row spacing {row_spacing}mm is too sparse{for_fabric} (target {band}). "
+            "Gaps between rows will show in the stitch-out."
+        )
+    return (
+        f"Row spacing {row_spacing}mm is too dense{for_fabric} (target {band}). "
+        "Dense fills cause thread breakage and fabric damage."
+    )
 
 
 def _is_stretchy_fabric(report: DesignReport) -> bool:
@@ -48,39 +69,37 @@ parameter_rules: list[Rule] = [
     Rule(
         id="row_spacing_too_low",
         category="parameters",
+        capability="auto_fix",
         severity="high",
         confidence=0.85,
         fields=["parameters.row_spacing_mm"],
         skip_when=lambda report: report.parameters.get("row_spacing_mm") is None,
         title="Row spacing too low",
         source="docs/sources/inkstitch/stitch-fill.md; extracted-data.md",
-        suggested_action="Increase row spacing to minimum 0.35mm in Ink/Stitch fill settings",
-        check=lambda report: (report.parameters.get("row_spacing_mm") or 0) < 0.35,
-        detail=lambda report: (
-            f"Row spacing is {report.parameters.get('row_spacing_mm')}mm (minimum: 0.35mm). "
-            "Dense fills cause thread breakage and fabric damage."
-        ),
+        suggested_action="Increase row spacing to the recommended density for this fabric",
+        check=lambda report: (report.parameters.get("row_spacing_mm") or 0)
+        < _density_preset(report).row_spacing_min_mm,
+        detail=lambda report: _density_detail(report, too_sparse=False),
     ),
     Rule(
         id="row_spacing_too_high",
         category="parameters",
+        capability="auto_fix",
         severity="medium",
         confidence=0.7,
         fields=["parameters.row_spacing_mm"],
         skip_when=lambda report: report.parameters.get("row_spacing_mm") is None,
         title="Row spacing too high",
         source="docs/sources/inkstitch/stitch-fill.md; docs/sources/community/fabric-presets.md",
-        suggested_action="Decrease row spacing — gaps between rows will show in finished embroidery",
-        check=lambda report: (report.parameters.get("row_spacing_mm") or 0) > ROW_SPACING_TOO_HIGH_MM,
-        detail=lambda report: (
-            f"Row spacing is {report.parameters.get('row_spacing_mm')}mm "
-            f"(maximum recommended: {ROW_SPACING_TOO_HIGH_MM}mm). "
-            "Gaps will be visible in stitch-out."
-        ),
+        suggested_action="Reduce row spacing to the recommended density for this fabric",
+        check=lambda report: (report.parameters.get("row_spacing_mm") or 0)
+        > _density_preset(report).row_spacing_max_mm,
+        detail=lambda report: _density_detail(report, too_sparse=True),
     ),
     Rule(
         id="stitch_length_too_short",
         category="parameters",
+        capability="auto_fix",
         severity="high",
         confidence=0.85,
         fields=["parameters.stitch_length_mm", "structure.stitch_types"],
@@ -98,6 +117,7 @@ parameter_rules: list[Rule] = [
     Rule(
         id="stitch_length_too_long",
         category="parameters",
+        capability="auto_fix",
         severity="medium",
         confidence=0.75,
         fields=["parameters.stitch_length_mm"],
@@ -114,6 +134,7 @@ parameter_rules: list[Rule] = [
     Rule(
         id="pull_compensation_missing",
         category="parameters",
+        capability="auto_fix",
         severity="medium",
         confidence=0.65,
         fields=["parameters.pull_compensation_mm", "structure.stitch_types", "physical.fabric_type"],
@@ -141,6 +162,7 @@ parameter_rules: list[Rule] = [
     Rule(
         id="extreme_density",
         category="parameters",
+        capability="auto_fix",
         severity="high",
         confidence=0.8,
         fields=["parameters.expand_mm"],

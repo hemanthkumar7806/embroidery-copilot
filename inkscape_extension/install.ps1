@@ -1,4 +1,4 @@
-# Inkscape AI - extension installer (Windows)
+# StitchBase - extension installer (Windows)
 # Copies the extension into Inkscape's user extensions folder, verifies the
 # copy, checks whether Inkscape is running, pings the live service, and shows
 # a clean native dialog with the result.
@@ -23,7 +23,7 @@ function Show-Result {
         [xml]$xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Inkscape AI" Width="480" SizeToContent="Height"
+        Title="StitchBase" Width="480" SizeToContent="Height"
         WindowStartupLocation="CenterScreen" ResizeMode="NoResize"
         Background="#FFFFFF" FontFamily="Segoe UI" ShowInTaskbar="True" Topmost="True">
   <Grid>
@@ -72,7 +72,7 @@ function Show-Result {
             [System.Windows.Forms.MessageBoxIcon]::Error
         }
         [System.Windows.Forms.MessageBox]::Show(
-            "$Heading`r`n`r`n$Body", 'Inkscape AI',
+            "$Heading`r`n`r`n$Body", 'StitchBase',
             [System.Windows.Forms.MessageBoxButtons]::OK, $icon) | Out-Null
         return
     } catch { }
@@ -85,7 +85,7 @@ function Show-Result {
     Read-Host 'Press Enter to close'
 }
 
-Write-Host 'Installing Inkscape AI extension...'
+Write-Host 'Installing StitchBase extension...'
 
 # Copy + verify
 $copied = $true
@@ -146,7 +146,7 @@ $dest
 $restartLine
 
 Then use:
-   Extensions  >  Inkscape AI  >  Send to AI Assistant
+   Extensions  >  StitchBase  >  Open in StitchBase
 
 $serviceLine
 "@

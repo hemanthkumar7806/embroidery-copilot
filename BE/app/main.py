@@ -74,8 +74,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
-# Private analytics admin API. Mounted before the "/" static mount so the
-# prefix is matched first. Auth is via X-Admin-Token (see app/api/v1/admin.py).
+# Analytics admin API. Mounted before the "/" static mount so the
+# prefix is matched first. No auth (see app/api/v1/admin.py) — don't share this URL.
 from app.api.v1.admin import admin_app  # noqa: E402
 
 app.mount("/admin/api", admin_app)

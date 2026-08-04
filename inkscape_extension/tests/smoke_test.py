@@ -33,10 +33,53 @@ def _install_inkex_stub() -> None:
     sys.modules["inkex"] = inkex
 
 
+def _check_agent_units(send_to_ai) -> None:
+    """Pure-function checks for the local agent (no Inkscape required)."""
+    actions = send_to_ai.build_apply_actions(
+        {"op": "set-attribute", "attribute": "inkstitch:row_spacing_mm",
+         "value": "0.4", "target_ids": ["a", "b"]}
+    )
+    assert actions == (
+        "select-by-id:a;object-set-attribute:inkstitch:row_spacing_mm,0.4;select-clear;"
+        "select-by-id:b;object-set-attribute:inkstitch:row_spacing_mm,0.4;select-clear"
+    ), actions
+    assert send_to_ai.build_apply_actions(
+        {"op": "simplify", "target_ids": ["x"]}
+    ) == "select-by-id:x;path-simplify;select-clear"
+
+    assert (
+        send_to_ai._qualify("inkstitch:row_spacing_mm")
+        == "{http://inkstitch.org/namespace}row_spacing_mm"
+    )
+    assert send_to_ai._qualify("d") == "d"
+
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" '
+        'xmlns:inkstitch="http://inkstitch.org/namespace">'
+        '<path id="p1" d="M0,0 L1,1" inkstitch:row_spacing_mm="0.25"/></svg>'
+    )
+    tmp = Path(tempfile.gettempdir()) / "inkscape_ai_agent_unit.svg"
+    tmp.write_text(svg, encoding="utf-8")
+    try:
+        assert send_to_ai._element_exists(tmp, "p1")
+        assert not send_to_ai._element_exists(tmp, "nope")
+        assert send_to_ai._read_attr(tmp, "p1", "inkstitch:row_spacing_mm") == "0.25"
+        assert send_to_ai._read_attr(tmp, "p1", "d") == "M0,0 L1,1"
+        assert send_to_ai._read_attr(tmp, "p1", "inkstitch:expand_mm") is None
+    finally:
+        tmp.unlink(missing_ok=True)
+
+    status, _before, result = send_to_ai._handle_command({"kind": "bogus", "payload": {}})
+    assert status == "failed" and "unknown" in result["error"]
+    print("Agent unit checks: OK")
+
+
 def main() -> int:
     _install_inkex_stub()
     sys.path.insert(0, str(EXT_DIR))
     import send_to_ai
+
+    _check_agent_units(send_to_ai)
 
     # Prefer local backend for smoke tests; fall back to DEFAULT_URL.
     base_url = os.environ.get("INKSCAPE_AI_BASE_URL", "http://localhost:8000").rstrip("/")
@@ -74,9 +117,21 @@ def main() -> int:
         send_to_ai._write_sidecar(sidecar, session_id)
         assert send_to_ai._read_sidecar(sidecar) == session_id
 
-        reused = send_to_ai._upload_or_create_session(base_url, doc.name, data, doc)
-        assert reused == session_id
-        print(f"Sidecar reuse session: {reused}")
+        # Default behavior: every Send-to-AI starts a FRESH session even with an
+        # existing sidecar, so a new design never inherits a previous chat/session.
+        fresh = send_to_ai._upload_or_create_session(base_url, doc.name, data, doc)
+        assert fresh != session_id
+        print(f"Fresh session (sidecar ignored by default): {fresh}")
+
+        # Opt-in reuse via INKSCAPE_AI_REUSE_SESSION=1 restores the old behavior.
+        send_to_ai._write_sidecar(sidecar, session_id)
+        os.environ["INKSCAPE_AI_REUSE_SESSION"] = "1"
+        try:
+            reused = send_to_ai._upload_or_create_session(base_url, doc.name, data, doc)
+            assert reused == session_id
+            print(f"Reuse opt-in session: {reused}")
+        finally:
+            del os.environ["INKSCAPE_AI_REUSE_SESSION"]
 
     url = f"{base_url}/?s={session_id}&from=inkscape"
     print(f"Deep link:    {url}")

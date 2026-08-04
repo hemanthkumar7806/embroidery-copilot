@@ -11,9 +11,10 @@ from sqlmodel import SQLModel, create_engine, select
 from app.core.config import settings
 from app.core.logging import logger
 
-# Import analytics models so their tables are registered on SQLModel.metadata
-# before create_all() runs.
+# Import models so their tables are registered on SQLModel.metadata before
+# create_all() runs.
 from app.models import analytics as _analytics  # noqa: F401
+from app.models.agent import AgentCommand
 from app.models.session import Message, Session
 
 
@@ -90,14 +91,17 @@ class DatabaseService:
             # There is no ORM relationship, so SQLAlchemy won't order these on its
             # own; Postgres (unlike SQLite) enforces the foreign key.
             db.flush()
-            db.add(
-                Message(
-                    session_id=session_id,
-                    role="assistant",
-                    content=preflight_content,
-                    sources_json=preflight_json,
+            # Design sessions have no welcome text (the report says it all) — don't
+            # store an empty assistant bubble.
+            if preflight_content:
+                db.add(
+                    Message(
+                        session_id=session_id,
+                        role="assistant",
+                        content=preflight_content,
+                        sources_json=preflight_json,
+                    )
                 )
-            )
             db.commit()
             db.refresh(row)
             return row
@@ -171,6 +175,109 @@ class DatabaseService:
         cutoff = datetime.now(UTC) - timedelta(days=settings.SESSION_TTL_DAYS)
         with DBSession(self.engine) as db:
             stmt = select(Session).where(Session.last_active_at < cutoff)
+            return list(db.exec(stmt).all())
+
+    # ------------------------------------------------------------------ #
+    # Agent command queue + AI action history
+    # ------------------------------------------------------------------ #
+
+    def enqueue_commands(
+        self,
+        session_id: str,
+        items: list[dict],
+        batch_id: str | None = None,
+    ) -> list[AgentCommand]:
+        """Enqueue one or more commands (optionally as a named batch).
+
+        Each item: {kind, issue_id?, payload(dict)}. Returns the created rows.
+        """
+        import json as _json
+        import uuid as _uuid
+
+        created: list[AgentCommand] = []
+        now = datetime.now(UTC)
+        with DBSession(self.engine) as db:
+            for item in items:
+                cmd = AgentCommand(
+                    id=str(_uuid.uuid4()),
+                    session_id=session_id,
+                    batch_id=batch_id,
+                    kind=item["kind"],
+                    issue_id=item.get("issue_id"),
+                    payload_json=_json.dumps(item.get("payload") or {}),
+                    status="pending",
+                    created_at=now,
+                    updated_at=now,
+                )
+                db.add(cmd)
+                created.append(cmd)
+            row = db.get(Session, session_id)
+            if row:
+                row.last_active_at = now
+                db.add(row)
+            db.commit()
+            for cmd in created:
+                db.refresh(cmd)
+        return created
+
+    def pending_commands(self, session_id: str, limit: int = 50) -> list[AgentCommand]:
+        with DBSession(self.engine) as db:
+            stmt = (
+                select(AgentCommand)
+                .where(AgentCommand.session_id == session_id)
+                .where(AgentCommand.status == "pending")
+                .order_by(AgentCommand.created_at)
+                .limit(limit)
+            )
+            return list(db.exec(stmt).all())
+
+    def get_command(self, command_id: str) -> Optional[AgentCommand]:
+        with DBSession(self.engine) as db:
+            return db.get(AgentCommand, command_id)
+
+    def ack_command(
+        self,
+        command_id: str,
+        status: str,
+        before: dict | None = None,
+        result: dict | None = None,
+    ) -> Optional[AgentCommand]:
+        import json as _json
+
+        with DBSession(self.engine) as db:
+            cmd = db.get(AgentCommand, command_id)
+            if not cmd:
+                return None
+            cmd.status = status
+            if before is not None:
+                cmd.before_json = _json.dumps(before)
+            if result is not None:
+                cmd.result_json = _json.dumps(result)
+            cmd.updated_at = datetime.now(UTC)
+            db.add(cmd)
+            db.commit()
+            db.refresh(cmd)
+            return cmd
+
+    def batch_commands(self, session_id: str, batch_id: str) -> list[AgentCommand]:
+        with DBSession(self.engine) as db:
+            stmt = (
+                select(AgentCommand)
+                .where(AgentCommand.session_id == session_id)
+                .where(AgentCommand.batch_id == batch_id)
+                .order_by(AgentCommand.created_at)
+            )
+            return list(db.exec(stmt).all())
+
+    def list_batches(self, session_id: str) -> list[AgentCommand]:
+        """All batched commands for a session (grouped/summarized by the caller)."""
+        with DBSession(self.engine) as db:
+            stmt = (
+                select(AgentCommand)
+                .where(AgentCommand.session_id == session_id)
+                .where(AgentCommand.batch_id.is_not(None))  # type: ignore[union-attr]
+                .order_by(AgentCommand.created_at)
+            )
             return list(db.exec(stmt).all())
 
 

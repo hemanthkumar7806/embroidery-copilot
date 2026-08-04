@@ -14,3 +14,7 @@ def load_preflight_prompt() -> str:
 
 def load_chat_prompt() -> str:
     return _read_prompt("chat.md")
+
+
+def load_ai_review_prompt() -> str:
+    return _read_prompt("ai_review.md")

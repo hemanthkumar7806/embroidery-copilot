@@ -1,8 +1,9 @@
-Inkscape AI — Extension (Install Guide)
+StitchBase — Extension (Install Guide)
 =======================================
+AI Design Review for Ink/Stitch
 
 One click in Inkscape uploads your current design and opens the
-Inkscape AI review in your browser. No account, no setup, no settings.
+StitchBase review in your browser. No account, no setup, no settings.
 
 What you need
 -------------
@@ -27,7 +28,7 @@ telling you whether it SUCCEEDED or FAILED - no guesswork.
 When you see the "Installation successful!" popup, RESTART Inkscape.
 Done - skip the manual steps below.
 
-(The popup also runs a quick online check and tells you if the Inkscape AI
+(The popup also runs a quick online check and tells you if the StitchBase
 service is reachable. If it says it couldn't reach the server, that does
 NOT affect the install - just try using it again in a moment.)
 
@@ -53,7 +54,7 @@ Step 3 — Fully close and reopen Inkscape.
 How to use it
 -------------
 1. Open or draw a design in Inkscape.
-2. Go to:  Extensions  ->  Inkscape AI  ->  Send to AI Assistant
+2. Go to:  Extensions  ->  StitchBase  ->  Open in StitchBase
 3. Your browser opens at https://stitchbase.duckdns.org with your
    design loaded and the AI review ready to chat.
 
@@ -71,4 +72,4 @@ Troubleshooting
   paste it into your browser.
 - Nothing happens / error: check your internet connection and try again.
 
-Support: contact the Inkscape AI team.
+Support: contact the StitchBase team.

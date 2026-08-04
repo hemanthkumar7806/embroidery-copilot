@@ -46,16 +46,20 @@ def test_upload_svg_to_chat_session_preserves_history(client: TestClient):
     body = upload.json()
     assert body["session_id"] == session_id
     assert "preflight" in body
-    assert body["preflight"]["content"]
+    # Design sessions have no chat welcome text by design — the report panel is the
+    # product. What must be present is the analysis payload.
+    assert body["preflight"]["content"] == ""
+    assert body["preflight"]["rule_engine"] is not None
 
     detail = client.get(f"/api/v1/sessions/{session_id}")
     assert detail.status_code == 200
     data = detail.json()
     assert data["design_report"]["summary"]["element_count"] > 0
 
+    # Prior chat history survives the upload (no welcome message is appended).
     roles = [m["role"] for m in data["chat_history"]]
     assert roles.count("user") >= 1
-    assert roles.count("assistant") >= 2
+    assert roles.count("assistant") >= 1
 
     try:
         database_service.delete_session(session_id)

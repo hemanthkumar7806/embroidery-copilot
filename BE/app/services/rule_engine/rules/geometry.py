@@ -23,6 +23,7 @@ geometry_rules: list[Rule] = [
     Rule(
         id="high_node_count",
         category="geometry",
+        capability="auto_fix",
         severity="medium",
         confidence=0.75,
         fields=["geometry.node_count"],
@@ -41,6 +42,7 @@ geometry_rules: list[Rule] = [
     Rule(
         id="open_paths_present",
         category="geometry",
+        capability="guided",
         severity="high",
         confidence=0.9,
         fields=["geometry.has_open_paths", "geometry.open_path_count"],
@@ -58,6 +60,7 @@ geometry_rules: list[Rule] = [
     Rule(
         id="high_overlap_ratio",
         category="geometry",
+        capability="guided",
         severity="high",
         confidence=0.8,
         fields=["geometry.overlap_ratio"],
@@ -74,6 +77,7 @@ geometry_rules: list[Rule] = [
     Rule(
         id="design_exceeds_hoop",
         category="geometry",
+        capability="guided",
         severity="critical",
         confidence=0.95,
         fields=["geometry.bounding_box", "physical.hoop_size_mm"],
@@ -112,6 +116,7 @@ geometry_rules: list[Rule] = [
     Rule(
         id="over_detailed_path",
         category="geometry",
+        capability="auto_fix",
         group="complexity",
         severity="medium",
         confidence=0.75,
@@ -132,6 +137,7 @@ geometry_rules: list[Rule] = [
     Rule(
         id="narrow_geometry_stitch_mismatch",
         category="geometry",
+        capability="guided",
         group="feasibility",
         severity="high",
         confidence=0.85,
@@ -176,6 +182,7 @@ geometry_rules: list[Rule] = [
     Rule(
         id="fill_on_narrow_path",
         category="geometry",
+        capability="guided",
         group="feasibility",
         severity="high",
         confidence=0.85,

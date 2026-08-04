@@ -17,6 +17,7 @@ from app.services.rule_engine.config import (
     SYMPTOM_FREEZE_IDS,
     SYMPTOM_PUCKER_IDS,
 )
+from app.services.fabric_presets import DENSITY_HARD_MIN_MM
 from app.services.rule_engine.decision import get_decision
 from app.services.rule_engine.decision_engine.build_decision import build_decision
 from app.services.rule_engine.decision_engine.classifier import classify_failure
@@ -223,6 +224,12 @@ def _resolve_issue_severity(rule: Rule, report: DesignReport) -> Severity:
         if min_dim is not None and min_dim < SATIN_MIN_WIDTH_MM:
             return "high"
 
+    if rule.id == "row_spacing_too_low":
+        # Below the universal hard floor, a dense fill breaks thread on ANY fabric.
+        row_spacing = report.parameters.get("row_spacing_mm")
+        if row_spacing is not None and row_spacing < DENSITY_HARD_MIN_MM:
+            return "critical"
+
     return rule.severity
 
 
@@ -269,6 +276,7 @@ def run_rule_engine(
                 detail=rule.detail(report),
                 source=rule.source,
                 suggested_action=rule.suggested_action,
+                capability=rule.capability,
                 group=rule.group,
                 evidence=rule.evidence(report) if rule.evidence else None,
             )
@@ -321,13 +329,17 @@ def result_to_dict(result: RuleEngineResult) -> dict[str, Any]:
         payload = asdict(issue)
         return payload
 
+    # Coverage is a trust signal in the UI ("checked N embroidery rules"), so it travels
+    # with the payload rather than being hardcoded client-side.
+    summary = {**result.summary, "rules_checked": len(ALL_RULES)}
+
     return {
         "issues": [_issue(issue) for issue in result.issues],
         "context_gaps": [_issue(issue) for issue in result.context_gap_issues],
         "classification": asdict(result.classification),
         "root_cause": asdict(result.root_cause) if result.root_cause else None,
         "detailed_decision": asdict(result.detailed_decision),
-        "summary": result.summary,
+        "summary": summary,
         "gaps": asdict(result.gaps),
         "decision": asdict(result.decision),
     }

@@ -23,6 +23,13 @@ FailureType = Literal["geometry", "structure", "parameter", "routing", "unknown"
 
 ConfidenceTier = Literal["low", "medium", "high", "certain"]
 
+# Capability tier: how much the platform can safely automate a fix.
+#   auto_fix       -> deterministic live edit (attribute/order), one-click, undoable (🟢)
+#   guided         -> AI knows the fix but can't safely apply it live; guide + verify (🟡)
+#   recommendation -> design-level/subjective; reasoning only, no automation (🔵)
+# Default is the safest tier: never auto-apply something not explicitly marked.
+Capability = Literal["auto_fix", "guided", "recommendation"]
+
 
 @dataclass
 class DesignReport:
@@ -47,6 +54,7 @@ class Issue:
     detail: str
     source: str
     suggested_action: str
+    capability: Capability = "recommendation"
     adjustment_note: str | None = None
     group: str | None = None
     evidence: dict[str, Any] | None = None
@@ -67,6 +75,9 @@ class Rule:
     skip_when: Callable[[DesignReport], bool] | None = None
     group: str | None = None
     evidence: Callable[[DesignReport], dict[str, Any]] | None = None
+    # Capability tier this rule's issue belongs to (see Capability). Defaults to the
+    # safest tier; only rules with a deterministic fix should opt into auto_fix.
+    capability: Capability = "recommendation"
 
 
 @dataclass

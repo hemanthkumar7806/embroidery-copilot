@@ -6,6 +6,9 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "apscheduler>=3.10.4",
+    # SVG->PNG for the multimodal LLM review. On the Amazon Linux prod host this needs the
+    # cairo system lib: `sudo yum install -y cairo`. Local dev falls back to the Inkscape CLI.
+    "cairosvg>=2.7.0",
     "llama-cloud>=1.0",
     "fastapi>=0.121.0",
     "langchain-anthropic>=0.3.0",

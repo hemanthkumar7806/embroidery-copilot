@@ -75,9 +75,6 @@ class Settings:
     COOKIE_SECURE: bool = _parse_bool(
         os.getenv("COOKIE_SECURE"), os.getenv("DEBUG", "true").lower() not in ("true", "1", "yes")
     )
-    # Admin dashboard bearer token. When empty, admin endpoints are disabled.
-    ADMIN_TOKEN: str = os.getenv("ADMIN_TOKEN", "").strip()
-
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "DEBUG" if DEBUG else "INFO")
     LOG_FORMAT: str = os.getenv("LOG_FORMAT", "console")
 

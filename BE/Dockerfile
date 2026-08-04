@@ -8,6 +8,7 @@ ENV PYTHONUNBUFFERED=1 \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
+    libcairo2 \
     && pip install --upgrade pip uv \
     && rm -rf /var/lib/apt/lists/*
 

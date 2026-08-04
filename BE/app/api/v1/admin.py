@@ -1,32 +1,15 @@
 """Private admin API for the analytics dashboard.
 
 Mounted as a standalone sub-application with permissive CORS so the standalone
-admin/index.html (opened from the file system) can call it with an
-``X-Admin-Token`` header. Access requires ``settings.ADMIN_TOKEN`` to be set;
-when it is empty the admin API is disabled.
+admin/index.html (opened from the file system) can call it.
 """
 
 from typing import Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
+from fastapi import FastAPI, HTTPException, Query
 from starlette.concurrency import run_in_threadpool
 
-from app.core.config import settings
 from app.services import analytics
-
-
-async def require_admin(x_admin_token: Optional[str] = Header(default=None)) -> None:
-    if not settings.ADMIN_TOKEN:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Admin API disabled: set ADMIN_TOKEN in the backend environment.",
-        )
-    if not x_admin_token or x_admin_token != settings.ADMIN_TOKEN:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or missing X-Admin-Token.",
-        )
-
 
 admin_app = FastAPI(
     title="Inkscape AI Admin API",
@@ -42,16 +25,16 @@ admin_app = FastAPI(
 
 @admin_app.get("/ping")
 async def ping() -> dict:
-    """Unauthenticated reachability check that also reports if admin is enabled."""
-    return {"ok": True, "admin_enabled": bool(settings.ADMIN_TOKEN)}
+    """Unauthenticated reachability check."""
+    return {"ok": True, "admin_enabled": True}
 
 
-@admin_app.get("/overview", dependencies=[Depends(require_admin)])
+@admin_app.get("/overview")
 async def get_overview() -> dict:
     return await run_in_threadpool(analytics.overview)
 
 
-@admin_app.get("/visitors", dependencies=[Depends(require_admin)])
+@admin_app.get("/visitors")
 async def get_visitors(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
@@ -60,7 +43,7 @@ async def get_visitors(
     return {"visitors": rows}
 
 
-@admin_app.get("/sessions", dependencies=[Depends(require_admin)])
+@admin_app.get("/sessions")
 async def get_sessions(
     visitor_id: Optional[str] = None,
     kind: Optional[str] = None,
@@ -74,7 +57,7 @@ async def get_sessions(
     return {"sessions": rows}
 
 
-@admin_app.get("/sessions/{session_id}", dependencies=[Depends(require_admin)])
+@admin_app.get("/sessions/{session_id}")
 async def get_session_detail(session_id: str) -> dict:
     detail = await run_in_threadpool(analytics.session_detail, session_id)
     if detail is None:
@@ -82,7 +65,7 @@ async def get_session_detail(session_id: str) -> dict:
     return detail
 
 
-@admin_app.get("/events", dependencies=[Depends(require_admin)])
+@admin_app.get("/events")
 async def get_events(limit: int = Query(200, ge=1, le=1000)) -> dict:
     rows = await run_in_threadpool(analytics.recent_events, limit)
     return {"events": rows}

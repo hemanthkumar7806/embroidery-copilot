@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
-  <name>Send to AI Assistant</name>
+  <name>Open in StitchBase</name>
   <id>org.inkscape.ai.send_to_ai</id>
   <effect>
     <object-type>all</object-type>
     <effects-menu>
-      <submenu name="Inkscape AI"/>
+      <submenu name="StitchBase"/>
     </effects-menu>
   </effect>
   <script>

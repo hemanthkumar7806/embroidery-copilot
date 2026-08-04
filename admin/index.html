@@ -132,14 +132,10 @@
 <div id="setup" class="modal-bg hidden">
   <div class="modal">
     <h2>Connect to your backend</h2>
-    <p>Private dashboard. Enter your backend URL and admin token (from <span class="mono">ADMIN_TOKEN</span>). Stored only in this browser.</p>
+    <p>Private dashboard. Enter your backend URL. Stored only in this browser.</p>
     <div class="field">
       <label>Backend base URL</label>
       <input id="setupUrl" placeholder="https://stitchbase.duckdns.org" />
-    </div>
-    <div class="field">
-      <label>Admin token</label>
-      <input id="setupToken" type="password" placeholder="your ADMIN_TOKEN" />
     </div>
     <div id="setupErr" class="err hidden"></div>
     <div style="display:flex; gap:10px; justify-content:flex-end;">
@@ -181,10 +177,9 @@
 </div>
 
 <script>
-const LS = { url: "iai_admin_url", token: "iai_admin_token" };
+const LS = { url: "iai_admin_url" };
 const state = {
   base: localStorage.getItem(LS.url) || "",
-  token: localStorage.getItem(LS.token) || "",
   view: "overview",
   charts: {},
 };
@@ -203,11 +198,7 @@ const ms = (n) => (n==null?"—":(n>=1000?(n/1000).toFixed(1)+"s":n+"ms"));
 const short = (s,n=10) => s ? String(s).slice(0,n) : "—";
 
 async function api(path) {
-  const res = await fetch(state.base.replace(/\/$/,"") + "/admin/api" + path, {
-    headers: { "X-Admin-Token": state.token },
-  });
-  if (res.status === 401) throw new Error("Unauthorized — check your admin token.");
-  if (res.status === 503) throw new Error("Admin API disabled — set ADMIN_TOKEN on the backend.");
+  const res = await fetch(state.base.replace(/\/$/,"") + "/admin/api" + path);
   if (!res.ok) throw new Error("Request failed (" + res.status + ")");
   return res.json();
 }
@@ -222,15 +213,13 @@ function clearError(){ $("#globalErr").classList.add("hidden"); }
 /* ---------- Setup ---------- */
 function openSetup() {
   $("#setupUrl").value = state.base || "";
-  $("#setupToken").value = state.token || "";
   $("#setup").classList.remove("hidden");
 }
 $("#setupSave").onclick = async () => {
   const url = $("#setupUrl").value.trim();
-  const token = $("#setupToken").value.trim();
-  if (!url || !token) { const e=$("#setupErr"); e.textContent="Both fields are required."; e.classList.remove("hidden"); return; }
-  state.base = url; state.token = token;
-  localStorage.setItem(LS.url, url); localStorage.setItem(LS.token, token);
+  if (!url) { const e=$("#setupErr"); e.textContent="Backend URL is required."; e.classList.remove("hidden"); return; }
+  state.base = url;
+  localStorage.setItem(LS.url, url);
   $("#setup").classList.add("hidden");
   await boot();
 };
