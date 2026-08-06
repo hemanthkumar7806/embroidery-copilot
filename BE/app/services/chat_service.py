@@ -56,6 +56,7 @@ async def generate_chat_reply(
     design_report: dict[str, Any],
     history: list[Message],
     user_message: str,
+    selected_finding_id: str | None = None,
 ) -> tuple[str, list[dict[str, Any]], str, str, dict[str, Any], dict[str, Any]]:
     accumulated = extract_context(user_message, history)
     stored = design_report.get("session_context")
@@ -82,6 +83,20 @@ async def generate_chat_reply(
     wants_preflight = has_design and user_requests_preflight(user_message)
     describes_symptom = user_describes_symptom(accumulated)
     is_first_user_turn = user_turns == 0
+    fabric_known = bool((design_report.get("physical") or {}).get("fabric_type"))
+
+    # The finding the user currently has selected/highlighted in the UI, if any — resolved by id
+    # so the model can answer "how do I fix this" without asking which finding "this" is.
+    selected_finding: dict[str, Any] | None = None
+    if selected_finding_id:
+        # The FE also generates per-shape instance ids as "{issue_id}::{element_id}" when the
+        # user drills into one shape within a finding — fall back to the parent finding for those.
+        parent_id = selected_finding_id.split("::", 1)[0]
+        for issue in rules_result.get("issues") or []:
+            issue_id = issue.get("id")
+            if issue_id == selected_finding_id or issue_id == parent_id:
+                selected_finding = issue
+                break
 
     if wants_preflight:
         system_prompt = load_preflight_prompt()
@@ -120,11 +135,33 @@ async def generate_chat_reply(
             "Ask at most one follow-up question, and only if the answer would change the diagnosis or "
             "recommendation. Skip context_gaps."
         )
-    elif is_first_user_turn:
-        flow_instruction = (
-            "\n\nThis is the user's FIRST message after the welcome. "
-            "Ask clarifying questions (intent + fabric/garment). Do NOT output a full preflight checklist yet."
-        )
+    else:
+        # Reaching here means has_design is True (the `not has_design` branch above already
+        # caught the only case with no review) — so a review has ALREADY run automatically on
+        # upload, regardless of chat turn count. Onboarding questions ("what are you trying to
+        # achieve", "what garment is this", "run a preflight check") are never appropriate here:
+        # the findings, and often the fabric/selected finding too, already exist below.
+        selected_bit = " and the finding they currently have highlighted" if selected_finding else ""
+        if is_first_user_turn and not fabric_known:
+            flow_instruction = (
+                "\n\nThis is the user's first chat message, but a review already ran automatically "
+                "on upload — rule_engine_findings.issues and the verdict already exist below. Do NOT "
+                "ask what the user is trying to achieve or offer to run a preflight/another review. "
+                "Answer their actual question directly using the findings" + selected_bit + ". "
+                "Fabric is not set yet — only if the answer would genuinely differ by fabric, ask one "
+                "short fabric question alongside your answer, not instead of it."
+            )
+        else:
+            flow_instruction = (
+                "\n\nA design review has already completed. Its findings" + selected_bit
+                + (", and the fabric already set (see design report)" if fabric_known else "")
+                + " are known context below. Treat this as the primary context: answer the user's "
+                "question directly using it. Never ask onboarding questions (what are you trying to "
+                "achieve, what garment is this, run a preflight/another review) — a review already "
+                "ran. Never ask for fabric, garment, or which finding/objects are affected if that "
+                "is already present below. Only ask a follow-up if the answer would genuinely change "
+                "depending on something still missing."
+            )
 
     messages: list = [
         SystemMessage(content=f"{system_prompt}\n\n{rag_instruction}{flow_instruction}")
@@ -136,8 +173,17 @@ async def generate_chat_reply(
         "context_gaps": rules_result.get("context_gaps") or [],
     }
 
+    selected_finding_block = (
+        f"Currently selected/highlighted finding (the user is looking at this in the UI right now — "
+        f'when they say "this"/"it" they mean this finding unless context clearly says otherwise; '
+        f"answer about it directly first, then optionally note any assumptions):\n"
+        f"{json.dumps(selected_finding, indent=2)}\n\n"
+        if selected_finding
+        else ""
+    )
     context_block = (
         f"Design uploaded: {has_design}\n"
+        f"{selected_finding_block}"
         f"Design report JSON:\n{json.dumps(design_report, indent=2)}\n\n"
         "Rule engine findings (cite issue IDs only when Design uploaded is true):\n"
         f"{json.dumps(llm_rules, indent=2)}\n\n"

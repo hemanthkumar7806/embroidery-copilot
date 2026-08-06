@@ -129,21 +129,6 @@
 </head>
 <body>
 
-<div id="setup" class="modal-bg hidden">
-  <div class="modal">
-    <h2>Connect to your backend</h2>
-    <p>Private dashboard. Enter your backend URL. Stored only in this browser.</p>
-    <div class="field">
-      <label>Backend base URL</label>
-      <input id="setupUrl" placeholder="https://stitchbase.duckdns.org" />
-    </div>
-    <div id="setupErr" class="err hidden"></div>
-    <div style="display:flex; gap:10px; justify-content:flex-end;">
-      <button class="primary" id="setupSave">Connect</button>
-    </div>
-  </div>
-</div>
-
 <div class="app">
   <aside class="sidebar">
     <div class="brand"><span class="dot"></span><b>Inkscape AI</b></div>
@@ -178,8 +163,9 @@
 
 <script>
 const LS = { url: "iai_admin_url" };
+const DEFAULT_URL = "https://stitchbase.duckdns.org";
 const state = {
-  base: localStorage.getItem(LS.url) || "",
+  base: localStorage.getItem(LS.url) || DEFAULT_URL,
   view: "overview",
   charts: {},
 };
@@ -210,20 +196,14 @@ function setStatus(ok, text) {
 function showError(msg) { const e=$("#globalErr"); e.textContent=msg; e.classList.remove("hidden"); }
 function clearError(){ $("#globalErr").classList.add("hidden"); }
 
-/* ---------- Setup ---------- */
-function openSetup() {
-  $("#setupUrl").value = state.base || "";
-  $("#setup").classList.remove("hidden");
-}
-$("#setupSave").onclick = async () => {
-  const url = $("#setupUrl").value.trim();
-  if (!url) { const e=$("#setupErr"); e.textContent="Backend URL is required."; e.classList.remove("hidden"); return; }
-  state.base = url;
-  localStorage.setItem(LS.url, url);
-  $("#setup").classList.add("hidden");
-  await boot();
+/* ---------- Settings ---------- */
+$("#settingsBtn").onclick = async () => {
+  const url = prompt("Backend base URL", state.base || DEFAULT_URL);
+  if (!url) return;
+  state.base = url.trim();
+  localStorage.setItem(LS.url, state.base);
+  await render();
 };
-$("#settingsBtn").onclick = openSetup;
 $("#refreshBtn").onclick = () => render();
 
 /* ---------- Navigation ---------- */
@@ -455,11 +435,6 @@ $("#overlay").onclick = closeDrawer;
 
 /* ---------- Boot ---------- */
 async function boot() {
-  if (!state.base || !state.token) { openSetup(); setStatus(false,"not connected"); return; }
-  try {
-    const ping = await fetch(state.base.replace(/\/$/,"") + "/admin/api/ping").then(r=>r.json());
-    if (!ping.admin_enabled) { setStatus(false,"admin disabled"); showError("Backend reachable but ADMIN_TOKEN is not set."); }
-  } catch(_) { /* render() will surface a clearer error */ }
   await render();
 }
 boot();

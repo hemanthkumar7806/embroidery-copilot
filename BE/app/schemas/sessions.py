@@ -78,6 +78,9 @@ class SessionDetailResponse(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=4000)
+    # The finding the user currently has selected/highlighted in the UI, if any — lets the
+    # backend answer "how do I fix this" unambiguously instead of asking which finding "this" is.
+    selected_finding_id: Optional[str] = None
 
 
 class SetContextRequest(BaseModel):

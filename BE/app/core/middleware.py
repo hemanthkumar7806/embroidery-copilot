@@ -19,8 +19,8 @@ class AdminCORSMiddleware(BaseHTTPMiddleware):
     Must be the OUTERMOST middleware so it handles the admin preflight before
     the app's strict CORSMiddleware (which would otherwise reject the standalone
     dashboard's origin, including the ``null`` origin of a file:// page). The
-    admin API is protected by the X-Admin-Token header, not cookies, so a
-    wildcard origin without credentials is safe here.
+    admin API has no auth and uses no cookies, so a wildcard origin without
+    credentials is safe here — but note the API itself is unauthenticated.
     """
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:

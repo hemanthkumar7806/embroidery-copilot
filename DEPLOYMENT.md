@@ -11,8 +11,10 @@
 | OS | Amazon Linux 2023 → SSH user is `ec2-user` |
 | SSH key | `inkscape-ai-beta.pem` (repo root) |
 
-Caddy runs on the host and reverse-proxies `stitchbase.duckdns.org` → `127.0.0.1:8000`,
-where the `stitchbase-be` Docker container listens. This deploy only touches that
+Caddy runs on the host (its own container, `caddy`) and reverse-proxies
+`stitchbase.duckdns.org` → `127.0.0.1:8000`, where the `inkscape-ai` Docker
+container (built from image `inkscape-ai-beta`) listens. Code + `.env` live in
+`/home/ec2-user/BE` on the box. This deploy only touches the `inkscape-ai`
 container — Caddy's config and TLS certs are untouched.
 
 ## Deploy
@@ -23,27 +25,22 @@ container — Caddy's config and TLS certs are untouched.
 
 What it does:
 1. Tars `BE/` locally (skips `.venv`, `data/`, `.git`, `.env`, caches).
-2. `scp`s it to `/home/ec2-user/stitchbase-be` on the server.
-3. SSHs in, `docker build`s a fresh image.
-4. Renames the running container to `stitchbase-be-prev` (stopped, kept as a
+2. `scp`s it into `/home/ec2-user/BE` on the server, extracting on top of the
+   existing directory (so `.env` and `data/` there are left untouched — they're
+   not in the uploaded archive).
+3. SSHs in, `docker build`s a fresh image (`inkscape-ai:latest`).
+4. Renames the running container to `inkscape-ai-prev` (stopped, kept as a
    rollback point) and starts the new one under the original name/port/volumes.
 5. Polls `/health` for ~20s. If it doesn't come up healthy, it automatically
-   rolls back to `stitchbase-be-prev`.
+   rolls back to `inkscape-ai-prev`.
 
 The server's `.env` (API keys, `DATABASE_URL`, etc.) and `data/` (SQLite DB,
 uploaded SVGs, chroma index) are **never overwritten** — they're excluded from
 the upload and the container mounts `data/` as a volume.
 
-**First run only** — the config block at the top of `scripts/deploy_ec2.sh`
-(`REMOTE_APP_DIR`, `CONTAINER_NAME`, `HOST_PORT`) assumes this is the first
-automated deploy. If the server already has a differently-named container or
-directory from earlier manual deploys, SSH in once and check before running:
-
-```bash
-ssh -i inkscape-ai-beta.pem ec2-user@13.234.128.12 "docker ps -a"
-```
-
-Adjust the variables to match if they differ.
+Confirmed once via `docker ps -a` on 2026-08-04 — real container is `inkscape-ai`,
+real code path is `/home/ec2-user/BE`. The script's config block already
+reflects this; only revisit it if the server setup changes.
 
 ## Rollback (manual)
 
@@ -51,7 +48,7 @@ If a bad deploy needs reverting after the fact:
 
 ```bash
 ssh -i inkscape-ai-beta.pem ec2-user@13.234.128.12 \
-  'docker rm -f stitchbase-be; docker rename stitchbase-be-prev stitchbase-be; docker start stitchbase-be'
+  'docker rm -f inkscape-ai; docker rename inkscape-ai-prev inkscape-ai; docker start inkscape-ai'
 ```
 
 ## ⚠️ Open security issue

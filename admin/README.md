@@ -8,23 +8,13 @@ This folder is for **you only**. It is not served to end users.
 
 ## Setup (one time)
 
-1. On the backend, set a secret admin token in the environment (`.env`):
+1. Open `admin/index.html` in your browser (double-click the file).
 
-   ```
-   ADMIN_TOKEN=choose-a-long-random-string
-   ```
-
-   Restart / redeploy the backend so it picks up the value. If `ADMIN_TOKEN`
-   is empty, the admin API stays disabled (returns 503).
-
-2. Open `admin/index.html` in your browser (double-click the file).
-
-3. In the "Connect to your backend" dialog, enter:
+2. In the "Connect to your backend" dialog, enter:
    - **Backend base URL** — e.g. `https://stitchbase.duckdns.org` (or
      `http://localhost:8000` when running locally)
-   - **Admin token** — the same value as `ADMIN_TOKEN`
 
-   These are saved in your browser's localStorage only. Use **Settings** to change them.
+   This is saved in your browser's localStorage only. Use **Settings** to change it.
 
 ## What you can see
 
@@ -40,10 +30,11 @@ This folder is for **you only**. It is not served to end users.
 
 ## Security notes
 
-- The admin API is protected by the `X-Admin-Token` header; keep the token
-  secret. Anyone with the token + URL can read all analytics.
-- The admin API allows any origin (so this local file can call it), but every
-  data endpoint still requires the token. Only the unauthenticated `/ping`
-  endpoint is public, and it only reports whether admin is enabled.
-- For extra safety in production you can additionally restrict `/admin/api` at
-  the reverse proxy (Caddy) to your IP.
+- **The admin API has no authentication.** Anyone who knows (or guesses) your
+  backend URL can read all analytics at `/admin/api/*` — visitor IPs, full
+  chat transcripts, full SVG designs. Don't share the backend URL, and treat
+  it as effectively public if it leaks.
+- The admin API also allows any origin (so this local file can call it from
+  `file://`).
+- If you want this locked down again later, add back a token check or an IP
+  allowlist in `BE/app/api/v1/admin.py` / at the reverse proxy (Caddy).

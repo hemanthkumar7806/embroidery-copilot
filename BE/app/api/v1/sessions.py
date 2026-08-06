@@ -287,7 +287,9 @@ async def chat_session(session_id: str, body: ChatRequest, request: Request) -> 
     chat_started = time.perf_counter()
     try:
         reply, chunks, rag_status, rag_detail, rules_payload, updated_report = (
-            await generate_chat_reply(design_report, history, body.message)
+            await generate_chat_reply(
+                design_report, history, body.message, body.selected_finding_id
+            )
         )
     except Exception as exc:
         logger.exception("chat_generation_failed", session_id=session_id, error=str(exc))

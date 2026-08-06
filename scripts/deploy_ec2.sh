@@ -6,16 +6,22 @@
 #
 set -euo pipefail
 
-# ---- config: verify these match the server before first run -------------
+# ---- config: matches the actual running setup (confirmed via `docker ps -a`) --
 EC2_HOST="13.234.128.12"
 SSH_USER="ec2-user"                       # Amazon Linux 2023 default user
 PEM_KEY="./inkscape-ai-beta.pem"
-REMOTE_APP_DIR="/home/ec2-user/stitchbase-be"   # where code lives on the box
-CONTAINER_NAME="stitchbase-be"
+REMOTE_APP_DIR="/home/ec2-user/BE"        # existing code + .env live here
+CONTAINER_NAME="inkscape-ai"              # existing container Caddy proxies to
 HOST_PORT="8000"                          # Caddy proxies to this port
 # ---------------------------------------------------------------------------
 
-chmod 600 "$PEM_KEY"
+# ssh on Windows checks the NTFS ACL, not POSIX mode bits — chmod doesn't apply there.
+if command -v icacls >/dev/null 2>&1; then
+  icacls "$PEM_KEY" /inheritance:r >/dev/null
+  icacls "$PEM_KEY" /grant:r "$(whoami):R" >/dev/null
+else
+  chmod 600 "$PEM_KEY"
+fi
 SSH="ssh -i $PEM_KEY -o StrictHostKeyChecking=accept-new $SSH_USER@$EC2_HOST"
 SCP="scp -i $PEM_KEY -o StrictHostKeyChecking=accept-new"
 
@@ -45,7 +51,7 @@ cd "$REMOTE_APP_DIR"
 docker build -t ${CONTAINER_NAME}:latest .
 
 # Keep the old container around (stopped) as an instant rollback point.
-if docker inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
+if docker container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
   docker rm -f "${CONTAINER_NAME}-prev" >/dev/null 2>&1 || true
   docker rename "$CONTAINER_NAME" "${CONTAINER_NAME}-prev" || true
   docker stop "${CONTAINER_NAME}-prev" >/dev/null 2>&1 || true
