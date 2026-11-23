@@ -1,8 +1,8 @@
-# Inkscape AI website
+# StitchBase website
 
-Static, plain HTML/CSS/JS download & marketing site for the Inkscape AI
-extension. No build step, no dependencies — just files you can open directly
-or deploy to any static host.
+Static, plain HTML/CSS/JS download & marketing site for the StitchBase
+Inkscape extension. No build step, no dependencies — just files you can open
+directly or deploy to any static host.
 
 ## Local preview
 
@@ -23,7 +23,7 @@ python scripts/build_extension_zip.py
 python scripts/copy_zip_to_website.py
 ```
 
-This produces `website/downloads/Inkscape-AI.zip`, which the site's Download
+This produces `website/downloads/StitchBase.zip`, which the site's Download
 buttons link to directly.
 
 ## Deploying
@@ -38,20 +38,22 @@ If your host supports a build command, you can chain both steps into one:
 `python scripts/build_extension_zip.py && python scripts/copy_zip_to_website.py`,
 with the publish directory set to `website`.
 
-## Adding real screenshots/video later
+## Real screenshots/video
 
-Every placeholder in `index.html` (the dashed boxes) has an HTML comment
-directly beneath it showing the exact `<img>`/`<video>` markup to drop in and
-which reserved filename to use, e.g.:
+The hero screenshot and the two videos are live:
 
-- `assets/img/screenshots/hero-review.png`
-- `assets/img/screenshots/install-windows-success.png`
-- `assets/img/screenshots/install-mac-success.png`
-- `assets/img/screenshots/install-linux-success.png`
-- `assets/video/usage-demo.mp4` (+ `.webm`, + `assets/img/screenshots/usage-poster.png` poster)
+- `assets/img/screenshots/hero-review.png` — hero screenshot (design preview +
+  preflight findings + chat), shown in `.screenshot-frame`.
+- `assets/video/demo.mp4` — full workflow walkthrough, embedded in the
+  "How it works" section (`.video-frame`).
+- `assets/video/installation.mp4` — installer walkthrough, embedded above the
+  OS install tabs (`.video-frame.install-video`).
 
-Drop the file into the matching folder, delete the placeholder `<div class="media-frame">`,
-and uncomment the real markup below it — no other changes needed.
+The per-OS "install success" screenshot placeholders (Windows/macOS/Linux)
+were removed — there are no screenshots for those, and the installation video
+above the tabs already covers that visually. If real per-OS screenshots show
+up later, add a `.screenshot-frame` (see hero markup) inside each `.tabpanel`
+and restore the two-column `.tabpanel` grid in `styles.css`.
 
 ## Enabling Google Analytics later
 

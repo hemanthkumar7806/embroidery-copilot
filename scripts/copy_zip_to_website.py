@@ -13,9 +13,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SRC_ZIP = ROOT / "dist" / "Inkscape-AI.zip"
+SRC_ZIP = ROOT / "dist" / "StitchBase.zip"
 DEST_DIR = ROOT / "website" / "downloads"
-DEST_ZIP = DEST_DIR / "Inkscape-AI.zip"
+DEST_ZIP = DEST_DIR / "StitchBase.zip"
 
 
 def main() -> None:

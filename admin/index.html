@@ -125,6 +125,51 @@
   .timeline { position: relative; padding-left: 18px; }
   .timeline .ev { position: relative; padding: 8px 0 8px 4px; border-left: 2px solid var(--line); margin-left: 4px; padding-left: 16px; }
   .timeline .ev::before { content: ""; position: absolute; left: -7px; top: 12px; width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+
+  /* Replay: a faithful (read-only) reproduction of the real product's own
+     layout - report/findings left, preview+chat right - so "what did they
+     see and click" doesn't require mentally reassembling three tables. */
+  .replay-bg { position: fixed; inset: 0; background: rgba(15,23,42,.6); display: none; z-index: 60; align-items: center; justify-content: center; }
+  .replay-bg.open { display: flex; }
+  .replay { width: 96vw; height: 92vh; max-width: 1400px; background: #fff; border-radius: 14px; overflow: hidden;
+    display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+  .replay-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .replay-head b { font-size: 14px; }
+  .replay-body { flex: 1; min-height: 0; display: flex; }
+  .replay-findings { width: 32%; min-width: 260px; max-width: 380px; background: #f8fafc; border-right: 1px solid var(--line); overflow-y: auto; padding: 10px; }
+  .replay-right { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .replay-preview { flex: 1; min-height: 160px; max-height: 40%; overflow: auto; border-bottom: 1px solid var(--line); background:
+     repeating-conic-gradient(#f3f4f6 0% 25%, #fff 0% 50%) 50% / 20px 20px; display: flex; align-items: center; justify-content: center; }
+  .replay-preview svg { max-width: 100%; max-height: 100%; }
+  .replay-chat { flex: 1; min-height: 0; overflow-y: auto; padding: 14px; background: #fff; }
+
+  .rv-hero { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid; }
+  .rv-hero.fix { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
+  .rv-hero.caution { background: #fffbeb; border-color: #fde68a; color: #b45309; }
+  .rv-hero.safe { background: #ecfdf5; border-color: #a7f3d0; color: #047857; }
+  .rv-hero .t { font-weight: 700; font-size: 15px; }
+  .rv-hero .s { font-size: 12px; color: #475569; margin-top: 2px; }
+
+  .rv-fabric { font-size: 11px; color: #64748b; background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px; margin-bottom: 10px; }
+  .rv-fabric b { color: #334155; }
+  .rv-tier { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; color: #64748b; margin: 12px 0 6px; }
+  .rv-card { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; }
+  .rv-card .ttl { font-size: 13px; font-weight: 600; color: #1e293b; }
+  .rv-card .sev { font-size: 10px; text-transform: uppercase; font-weight: 700; margin-top: 3px; }
+  .rv-card .det { font-size: 12px; color: #64748b; margin-top: 4px; }
+  .rv-btn { display: inline-flex; align-items: center; gap: 4px; border-radius: 6px; padding: 3px 8px; font-size: 11px; font-weight: 600; margin-top: 6px; }
+  .rv-btn.applied { background: #d1fae5; color: #047857; }
+  .rv-btn.reverted { background: #f1f5f9; color: #64748b; }
+  .rv-btn.untried-fix { background: #ecfdf5; color: #059669; border: 1px dashed #6ee7b7; opacity: .7; }
+  .rv-btn.untried-guided { background: #fffbeb; color: #b45309; border: 1px dashed #fcd34d; opacity: .7; }
+
+  .rv-msg { display: flex; gap: 8px; margin-bottom: 12px; align-items: flex-start; }
+  .rv-msg.user { justify-content: flex-end; }
+  .rv-msg .av { width: 26px; height: 26px; border-radius: 50%; background: #e2e8f0; color: #334155; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; }
+  .rv-msg .bub { max-width: 78%; padding: 8px 12px; border-radius: 14px; font-size: 13px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
+  .rv-msg.assistant .bub { background: #f1f5f9; color: #1e293b; border-top-left-radius: 4px; }
+  .rv-msg.user .bub { background: #4f46e5; color: #fff; border-top-right-radius: 4px; }
 </style>
 </head>
 <body>
@@ -161,9 +206,26 @@
   <div class="db" id="drawerBody"></div>
 </div>
 
+<div class="replay-bg" id="replayBg">
+  <div class="replay">
+    <div class="replay-head">
+      <b id="replayTitle">Session replay</b>
+      <button id="replayClose">Close</button>
+    </div>
+    <div id="replayHero"></div>
+    <div class="replay-body">
+      <div class="replay-findings" id="replayFindings"></div>
+      <div class="replay-right">
+        <div class="replay-preview" id="replayPreview"></div>
+        <div class="replay-chat" id="replayChat"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 const LS = { url: "iai_admin_url" };
-const DEFAULT_URL = "https://stitchbase.duckdns.org";
+const DEFAULT_URL = "https://app.stitchbase.online";
 const state = {
   base: localStorage.getItem(LS.url) || DEFAULT_URL,
   view: "overview",
@@ -307,13 +369,90 @@ async function renderVisitors(c) {
         <td class="mono">${esc(v.last_ip||"—")}</td>
         <td class="muted" title="${esc(v.user_agent||"")}">${esc((v.user_agent||"—").slice(0,40))}</td>
       </tr>`).join("")}</tbody></table></div>`;
-  $$("#content tbody tr").forEach(tr => tr.onclick = () => {
-    state.view = "sessions";
-    $$("#nav button").forEach(x => x.classList.toggle("active", x.dataset.view==="sessions"));
-    $("#viewTitle").textContent = "Sessions";
-    renderSessions($("#content"), tr.dataset.vid);
-  });
+  $$("#content tbody tr").forEach(tr => tr.onclick = () => openVisitor(tr.dataset.vid));
 }
+
+/* One person, one place: summary + their sessions + their chats + their
+   journey, instead of three disconnected tables the admin has to
+   cross-reference by hand. */
+async function openVisitor(visitorId, opts) {
+  const back = opts && opts.back;
+  openDrawer("Visitor " + short(visitorId,8) + "…", '<div class="empty">Loading…</div>', back);
+  try {
+    const [{ visitors }, { sessions }, { events }] = await Promise.all([
+      api("/visitors?limit=500"),
+      api("/sessions?visitor_id=" + encodeURIComponent(visitorId) + "&limit=100"),
+      api("/events?visitor_id=" + encodeURIComponent(visitorId) + "&limit=200"),
+    ]);
+    const v = visitors.find(x => x.id === visitorId) || {};
+
+    const meta = `
+      <div class="kv">
+        <div class="k">Visitor</div><div class="mono">${esc(visitorId)}</div>
+        <div class="k">Sessions</div><div>${num(v.session_count)}</div>
+        <div class="k">Messages</div><div>${num(v.message_count)}</div>
+        <div class="k">First seen</div><div>${fmtDate(v.first_seen_at)}</div>
+        <div class="k">Last seen</div><div title="${esc(fmtDate(v.last_seen_at))}">${rel(v.last_seen_at)}</div>
+        <div class="k">Last IP</div><div class="mono">${esc(v.last_ip||"—")}</div>
+        <div class="k">Device</div><div class="muted">${esc(v.user_agent||"—")}</div>
+      </div>`;
+
+    const sessionsHtml = sessions.length ? `
+      <div class="section-title">Sessions (${sessions.length})</div>
+      <table><tbody>${sessions.map(s=>`
+        <tr data-id="${esc(s.id)}" style="cursor:pointer">
+          <td title="${esc(fmtDate(s.created_at))}">${rel(s.created_at)}</td>
+          <td>${s.kind==="svg"?'<span class="chip info">SVG</span>':'<span class="chip">Chat</span>'}</td>
+          <td>${esc(s.filename||"—")}</td>
+          <td>${statusChip(s.rule_status)}</td>
+          <td>${num(s.message_count)} msgs</td>
+        </tr>`).join("")}</tbody></table>`
+      : `<div class="section-title">Sessions</div><div class="muted">No sessions yet.</div>`;
+
+    const journeyHtml = events.length ? `
+      <div class="section-title">Journey</div>
+      <div class="timeline">${events.map(e=>`
+        <div class="ev" data-sid="${esc(e.session_id||"")}" style="${e.session_id?"cursor:pointer":""}">
+          <div><b>${esc(journeyLabel(e.event_type))}</b> <span class="muted">&middot; ${rel(e.created_at)}</span></div>
+          ${e.session_id?`<div class="muted mono" style="font-size:12px">session ${short(e.session_id,8)}…</div>`:""}
+          ${e.meta?`<div class="muted" style="font-size:12px">${esc(JSON.stringify(e.meta))}</div>`:""}
+        </div>`).join("")}</div>`
+      : `<div class="section-title">Journey</div><div class="muted">No events yet.</div>`;
+
+    $("#drawerBody").innerHTML = renderBackLink(back) + meta + sessionsHtml + journeyHtml +
+      `<div style="margin-top:16px"><a href="#" id="viewAllSessions">View full sessions table with filters →</a></div>`;
+
+    $$("#drawerBody tbody tr[data-id]").forEach(tr => tr.onclick = () =>
+      openSession(tr.dataset.id, { back: () => openVisitor(visitorId, opts) }));
+    $$("#drawerBody .ev[data-sid]").forEach(el => { if (el.dataset.sid) el.onclick = () =>
+      openSession(el.dataset.sid, { back: () => openVisitor(visitorId, opts) }); });
+    $("#viewAllSessions").onclick = (e) => {
+      e.preventDefault();
+      closeDrawer();
+      state.view = "sessions";
+      $$("#nav button").forEach(x => x.classList.toggle("active", x.dataset.view==="sessions"));
+      $("#viewTitle").textContent = "Sessions";
+      renderSessions($("#content"), visitorId);
+    };
+    wireBackLink(back);
+  } catch (e) {
+    $("#drawerBody").innerHTML = `<div class="err">${esc(e.message||String(e))}</div>`;
+  }
+}
+
+const JOURNEY_LABELS = {
+  session_created:"Session created", session_opened:"Opened in browser", svg_uploaded:"SVG uploaded",
+  svg_replaced:"SVG replaced", chat_error:"Chat error", session_deleted:"Session deleted",
+};
+function journeyLabel(t) { return JOURNEY_LABELS[t] || t; }
+const ACTION_LABELS = { apply:"Applied fix", highlight:"Highlighted finding", verify:"Verified fix", revert:"Reverted (undo)" };
+function actionLabel(k) { return ACTION_LABELS[k] || k; }
+function actionStatusChip(s) {
+  const cls = s==="done" ? "ok" : s==="failed" ? "warn" : "info";
+  return `<span class="chip ${cls}">${esc(s)}</span>`;
+}
+function renderBackLink(back) { return back ? `<a href="#" id="drawerBack" style="display:inline-block;margin-bottom:14px">&larr; Back</a>` : ""; }
+function wireBackLink(back) { if (back) $("#drawerBack").onclick = (e) => { e.preventDefault(); back(); }; }
 
 async function renderSessions(c, visitorId) {
   c.innerHTML = `
@@ -356,14 +495,21 @@ async function renderSessions(c, visitorId) {
   await load();
 }
 
-async function openSession(id) {
-  openDrawer("Session " + short(id,8) + "…", '<div class="empty">Loading…</div>');
+async function openSession(id, opts) {
+  const back = opts && opts.back;
+  openDrawer("Session " + short(id,8) + "…", '<div class="empty">Loading…</div>', back);
   try {
-    const s = await api("/sessions/" + encodeURIComponent(id));
+    const [s, { actions }] = await Promise.all([
+      api("/sessions/" + encodeURIComponent(id)),
+      api("/sessions/" + encodeURIComponent(id) + "/actions"),
+    ]);
+    const visitorLink = s.visitor_id
+      ? `<a href="#" data-vid="${esc(s.visitor_id)}" class="mono">${esc(s.visitor_id)}</a>`
+      : "— (not opened in browser)";
     const meta = `
       <div class="kv">
         <div class="k">Session</div><div class="mono">${esc(s.id)}</div>
-        <div class="k">Visitor</div><div class="mono">${esc(s.visitor_id||"— (not opened in browser)")}</div>
+        <div class="k">Visitor</div><div>${visitorLink}</div>
         <div class="k">Type</div><div>${esc(s.kind)} &middot; ${esc(s.source||"—")}</div>
         <div class="k">File</div><div>${esc(s.filename||"—")} ${s.svg_bytes?`(${(s.svg_bytes/1024).toFixed(1)} KB)`:""}</div>
         <div class="k">Dimensions</div><div>${s.svg_width_mm?`${s.svg_width_mm} × ${s.svg_height_mm} mm`:"—"} &middot; ${num(s.element_count)} elements</div>
@@ -373,6 +519,25 @@ async function openSession(id) {
         <div class="k">Opened</div><div>${fmtDate(s.opened_at)}</div>
         <div class="k">IP / device</div><div class="mono">${esc(s.ip||"—")}</div>
       </div>`;
+
+    const sc = s.session_context;
+    let context;
+    if (sc && (sc.fabric_type || sc.garment_type || sc.symptom || sc.hoop_size_mm)) {
+      context = `
+        <div class="section-title">What the user told us</div>
+        <div class="kv">
+          ${sc.fabric_type?`<div class="k">Fabric</div><div>${esc(sc.fabric_type)}</div>`:""}
+          ${sc.garment_type?`<div class="k">Garment</div><div>${esc(sc.garment_type)}</div>`:""}
+          ${sc.symptom?`<div class="k">Reported symptom</div><div>${esc(sc.symptom)}</div>`:""}
+          ${sc.hoop_size_mm?`<div class="k">Hoop size</div><div>${esc(sc.hoop_size_mm)} mm</div>`:""}
+        </div>`;
+    } else if (!("session_context" in s)) {
+      // Key absent entirely => the live operational session (TTL-bound) is
+      // already gone, so this info can no longer be recovered.
+      context = `<div class="section-title">What the user told us</div><div class="muted">Session expired - fabric/garment/symptom no longer available.</div>`;
+    } else {
+      context = `<div class="section-title">What the user told us</div><div class="muted">Nothing volunteered yet (no fabric/garment/symptom mentioned in chat).</div>`;
+    }
 
     let issues = "";
     if (s.top_issues && s.top_issues.length) {
@@ -385,6 +550,15 @@ async function openSession(id) {
       svg = `<div class="section-title">SVG preview</div><div class="svgbox" id="svgPrev"></div>`;
     }
 
+    const actionsHtml = actions.length ? `<div class="section-title">Fixes &amp; undos (${actions.length})</div>
+      ${actions.map(a=>`
+        <div style="margin-bottom:6px">${actionStatusChip(a.status)} <b>${esc(actionLabel(a.kind))}</b>
+          ${a.issue_id?`<span class="muted">&middot; ${esc(a.issue_id)}</span>`:""}
+          ${a.batch_id?`<span class="chip" title="part of a batch fix/undo">batch</span>`:""}
+          <span class="muted" style="font-size:12px"> &middot; ${fmtDate(a.created_at)}</span>
+        </div>`).join("")}`
+      : `<div class="section-title">Fixes &amp; undos</div><div class="muted">No fix/undo actions in this session.</div>`;
+
     const msgs = (s.messages||[]);
     const chat = msgs.length ? `<div class="section-title">Chat (${msgs.length})</div>
       <div class="chat">${msgs.map(m=>`
@@ -392,7 +566,21 @@ async function openSession(id) {
           <div class="meta">${esc(m.role)} &middot; ${fmtDate(m.created_at)}${m.latency_ms!=null?` &middot; ${ms(m.latency_ms)}`:""}${m.rag_status?` &middot; rag:${esc(m.rag_status)}`:""}</div>
         </div>`).join("")}</div>` : `<div class="section-title">Chat</div><div class="muted">No messages.</div>`;
 
-    $("#drawerBody").innerHTML = meta + issues + svg + chat;
+    const evs = (s.events||[]);
+    const journey = evs.length ? `<div class="section-title">Journey</div>
+      <div class="timeline">${evs.map(e=>`
+        <div class="ev"><div><b>${esc(journeyLabel(e.event_type))}</b> <span class="muted">&middot; ${fmtDate(e.created_at)}</span></div></div>`).join("")}</div>` : "";
+
+    const replayBtn = (s.kind === "svg")
+      ? `<div style="margin-bottom:14px"><a href="#" id="openReplayBtn">&#9654; View as the user saw it</a></div>` : "";
+
+    $("#drawerBody").innerHTML = renderBackLink(back) + replayBtn + meta + context + issues + actionsHtml + svg + chat + journey;
+    wireBackLink(back);
+    if (replayBtn) $("#openReplayBtn").onclick = (e) => { e.preventDefault(); openReplay(s, actions); };
+    if (s.visitor_id) $("#drawerBody [data-vid]").onclick = (e) => {
+      e.preventDefault();
+      openVisitor(s.visitor_id, { back: () => openSession(id, opts) });
+    };
     if (s.svg_text && s.kind === "svg") {
       const box = $("#svgPrev");
       box.innerHTML = s.svg_text;
@@ -404,28 +592,128 @@ async function openSession(id) {
   }
 }
 
+/* ---------- Replay: read-only reproduction of the real product's own layout ---------- */
+const VERDICT_LABEL = { FIX_BEFORE_STITCH:"Fix before stitching", CAUTION:"Needs attention", SAFE_TO_TEST:"Safe to test" };
+const TIER_META = {
+  auto_fix: { label:"Fix automatically", glyph:"⚡", color:"#059669" },
+  guided: { label:"Fix in Inkscape", glyph:"✋", color:"#d97706" },
+  recommendation: { label:"Suggestions", glyph:"💡", color:"#0284c7" },
+};
+const SEV_COLOR = { critical:"#dc2626", high:"#ea580c", medium:"#2563eb", low:"#94a3b8" };
+function verdictClass(status) {
+  const up = String(status||"").toUpperCase();
+  if (up.includes("FIX") || up.includes("STOP")) return "fix";
+  if (up.includes("CAUTION")) return "caution";
+  return "safe";
+}
+
+function openReplay(s, actions) {
+  $("#replayTitle").textContent = "Session " + short(s.id,8) + "… replay";
+  const issues = s.top_issues || [];
+  const autoFixCount = issues.filter(i => i.capability === "auto_fix").length;
+  $("#replayHero").innerHTML = `
+    <div class="rv-hero ${verdictClass(s.rule_status)}">
+      <div style="flex:1">
+        <div class="t">${esc(VERDICT_LABEL[s.rule_status] || s.rule_status || "Reviewed")}</div>
+        <div class="s">${issues.length===0?"No issues found":num(issues.length)+" issue"+(issues.length===1?"":"s")+" found"}${autoFixCount>0?` &middot; ${autoFixCount} can be fixed automatically`:""}</div>
+      </div>
+    </div>`;
+
+  const sc = s.session_context || {};
+  const fabricLine = `<div class="rv-fabric">Reviewed using <b>${esc(sc.fabric_type || "generic fabric")}</b></div>`;
+
+  const groups = { auto_fix: [], guided: [], recommendation: [] };
+  issues.forEach(i => (groups[i.capability] || groups.recommendation).push(i));
+
+  const actionsByIssue = {};
+  (actions||[]).forEach(a => {
+    const base = (a.issue_id||"").split("::")[0];
+    if (base) (actionsByIssue[base] = actionsByIssue[base] || []).push(a);
+  });
+
+  function cardFor(issue) {
+    const acts = (actionsByIssue[issue.id]||[]).slice().sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
+    const lastApply = acts.filter(a=>a.kind==="apply" && a.status==="done").pop();
+    const lastRevert = acts.filter(a=>a.kind==="revert" && a.status==="done").pop();
+    const wasApplied = lastApply && (!lastRevert || new Date(lastApply.created_at) > new Date(lastRevert.created_at));
+    const wasReverted = lastRevert && (!lastApply || new Date(lastRevert.created_at) > new Date(lastApply.created_at));
+    let btn;
+    if (wasApplied) btn = `<span class="rv-btn applied">&#10003; Applied</span>`;
+    else if (wasReverted) btn = `<span class="rv-btn reverted">&#8630; Reverted (undo)</span>`;
+    else if (issue.capability === "auto_fix") btn = `<span class="rv-btn untried-fix" title="Available but never clicked">Fix (not tried)</span>`;
+    else if (issue.capability === "guided") btn = `<span class="rv-btn untried-guided" title="Available but never clicked">Show (not tried)</span>`;
+    else btn = "";
+    return `<div class="rv-card">
+      <div class="ttl">${esc(issue.title||issue.id)}</div>
+      <div class="sev" style="color:${SEV_COLOR[issue.severity]||'#94a3b8'}">${esc(issue.severity||"")}</div>
+      ${issue.detail?`<div class="det">${esc(issue.detail)}</div>`:""}
+      ${btn}
+    </div>`;
+  }
+
+  let findingsHtml = fabricLine;
+  if (issues.length === 0) {
+    findingsHtml += `<div class="muted" style="padding:8px">No issues found.</div>`;
+  } else {
+    ["auto_fix","guided","recommendation"].forEach(tier => {
+      const list = groups[tier];
+      if (!list.length) return;
+      const meta = TIER_META[tier];
+      findingsHtml += `<div class="rv-tier">${meta.glyph} ${esc(meta.label)} (${list.length})</div>`;
+      list.forEach(i => { findingsHtml += cardFor(i); });
+    });
+  }
+  const evs = s.events || [];
+  if (evs.length) {
+    findingsHtml += `<div class="rv-tier">Journey</div>
+      <div class="timeline" style="margin-top:4px">${evs.map(e=>`
+        <div class="ev" style="padding:4px 0 4px 16px"><div style="font-size:12px"><b>${esc(journeyLabel(e.event_type))}</b> <span class="muted">&middot; ${fmtDate(e.created_at)}</span></div></div>`).join("")}</div>`;
+  }
+  $("#replayFindings").innerHTML = findingsHtml;
+
+  if (s.svg_text && s.kind === "svg") {
+    $("#replayPreview").innerHTML = s.svg_text;
+    const el = $("#replayPreview svg");
+    if (el) { el.removeAttribute("width"); el.removeAttribute("height"); }
+  } else {
+    $("#replayPreview").innerHTML = `<div class="muted">No SVG for this session.</div>`;
+  }
+
+  const msgs = s.messages || [];
+  $("#replayChat").innerHTML = msgs.length ? msgs.map(m => `
+    <div class="rv-msg ${m.role==='user'?'user':'assistant'}">
+      ${m.role!=='user'?'<div class="av">AI</div>':''}
+      <div class="bub">${esc(m.content)}</div>
+      ${m.role==='user'?'<div class="av">U</div>':''}
+    </div>`).join("") : `<div class="muted">No chat messages.</div>`;
+
+  $("#replayBg").classList.add("open");
+}
+$("#replayClose").onclick = () => $("#replayBg").classList.remove("open");
+$("#replayBg").onclick = (e) => { if (e.target.id === "replayBg") $("#replayBg").classList.remove("open"); };
+
 async function renderJourney(c) {
   const { events } = await api("/events?limit=300");
   if (!events.length) { c.innerHTML = '<div class="panel empty">No events yet.</div>'; return; }
-  const label = {
-    session_created:"Session created", session_opened:"Opened in browser", svg_uploaded:"SVG uploaded",
-    svg_replaced:"SVG replaced", chat_error:"Chat error", session_deleted:"Session deleted",
-  };
   c.innerHTML = `<div class="panel"><div class="timeline">${events.map(e=>`
     <div class="ev">
-      <div><b>${esc(label[e.event_type]||e.event_type)}</b> <span class="muted">&middot; ${rel(e.created_at)}</span></div>
+      <div><b>${esc(journeyLabel(e.event_type))}</b> <span class="muted">&middot; ${rel(e.created_at)}</span></div>
       <div class="muted mono" style="font-size:12px">
-        ${e.session_id?`session ${short(e.session_id,8)}… `:""}${e.visitor_id?`&middot; visitor ${short(e.visitor_id,8)}… `:""}${e.ip?`&middot; ${esc(e.ip)}`:""}
+        ${e.session_id?`<span data-sid="${esc(e.session_id)}">session ${short(e.session_id,8)}…</span> `:""}${e.visitor_id?`&middot; <span data-vid="${esc(e.visitor_id)}">visitor ${short(e.visitor_id,8)}…</span> `:""}${e.ip?`&middot; ${esc(e.ip)}`:""}
       </div>
       ${e.meta?`<div class="muted" style="font-size:12px">${esc(JSON.stringify(e.meta))}</div>`:""}
     </div>`).join("")}</div></div>`;
-  $$("#content .ev").forEach((el,i) => { const ev=events[i]; if(ev.session_id) el.style.cursor="pointer", el.onclick=()=>openSession(ev.session_id); });
+  $$("#content [data-sid]").forEach(el => { el.style.cursor="pointer"; el.style.textDecoration="underline";
+    el.onclick=(e)=>{ e.stopPropagation(); openSession(el.dataset.sid); }; });
+  $$("#content [data-vid]").forEach(el => { el.style.cursor="pointer"; el.style.textDecoration="underline";
+    el.onclick=(e)=>{ e.stopPropagation(); openVisitor(el.dataset.vid); }; });
 }
 
 /* ---------- Drawer ---------- */
-function openDrawer(title, body) {
+function openDrawer(title, body, back) {
   $("#drawerTitle").textContent = title;
-  $("#drawerBody").innerHTML = body;
+  $("#drawerBody").innerHTML = renderBackLink(back) + body;
+  wireBackLink(back);
   $("#drawer").classList.add("open");
   $("#overlay").classList.add("open");
 }

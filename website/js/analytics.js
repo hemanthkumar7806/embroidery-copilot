@@ -6,7 +6,7 @@
 (function () {
   "use strict";
 
-  var GA_MEASUREMENT_ID = "";
+  var GA_MEASUREMENT_ID = "G-GDPFG1PG5X";
 
   if (!GA_MEASUREMENT_ID) return;
 

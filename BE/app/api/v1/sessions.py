@@ -397,6 +397,16 @@ async def ai_review(session_id: str, request: Request) -> AiReviewResponse:
     await run_in_threadpool(
         database_service.update_design_report, session_id, design_report_to_json(design_report)
     )
+    # Keep the permanent analytics record (admin dashboard) in sync - without this,
+    # AI-added findings only ever show in the live app, never in admin's session
+    # detail or replay, since that record is otherwise only written at upload time.
+    _, _, updated_top_issues = analytics.summarize_rules(rules_payload)
+    analytics.update_session_issues(
+        session_id,
+        rule_status=(rules_payload.get("decision") or {}).get("status"),
+        issue_count=len(rules_payload.get("issues") or []),
+        top_issues=updated_top_issues,
+    )
     analytics.record_event(
         "ai_review_run",
         session_id=session_id,

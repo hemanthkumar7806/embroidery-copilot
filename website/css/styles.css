@@ -1,4 +1,4 @@
-/* Inkscape AI — download site styles */
+/* StitchBase — download site styles */
 
 :root {
   --color-bg: #ffffff;
@@ -210,35 +210,53 @@ a {
   background: linear-gradient(180deg, var(--color-bg-alt) 0%, var(--color-bg) 100%);
 }
 
+.hero .container {
+  max-width: 1280px;
+}
+
 .hero-grid {
   display: grid;
-  grid-template-columns: 1.05fr 0.95fr;
-  gap: 48px;
+  grid-template-columns: minmax(420px, 0.95fr) 1.2fr;
   align-items: center;
+  gap: 56px;
+}
+
+.hero-copy {
+  max-width: 520px;
+}
+
+.hero-media {
+  width: 100%;
 }
 
 .eyebrow {
-  display: inline-block;
-  font-size: 0.82rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: uppercase;
   color: var(--color-accent);
-  margin-bottom: 14px;
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  border-radius: 999px;
+  padding: 5px 12px;
+  margin-bottom: 18px;
 }
 
 .hero h1 {
-  font-size: clamp(2rem, 4vw, 2.75rem);
-  line-height: 1.12;
+  font-size: clamp(2.1rem, 3.6vw, 3rem);
+  line-height: 1.15;
   letter-spacing: -0.02em;
   margin: 0 0 18px;
+  text-wrap: balance;
 }
 
 .hero-sub {
   font-size: 1.08rem;
   color: var(--color-text-muted);
   margin: 0 0 28px;
-  max-width: 46ch;
+  max-width: 44ch;
 }
 
 .hero-actions {
@@ -250,8 +268,19 @@ a {
 }
 
 .hero-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
   font-size: 0.85rem;
   color: var(--color-text-muted);
+}
+
+.hero-note svg {
+  width: 16px;
+  height: 16px;
+  color: var(--color-accent);
+  flex-shrink: 0;
+  margin-top: 2px;
 }
 
 /* Trust bar */
@@ -454,6 +483,52 @@ a {
   aspect-ratio: 4 / 3;
 }
 
+.screenshot-frame {
+  width: 100%;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--color-border);
+}
+
+.hero-media .screenshot-frame {
+  box-shadow: 0 20px 50px rgba(16, 24, 40, 0.14), 0 4px 12px rgba(16, 24, 40, 0.08);
+}
+
+.screenshot-frame img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* Real video embeds (replace .media-frame placeholders) */
+
+.video-frame {
+  width: 100%;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  background: #000;
+}
+
+.video-frame video {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.install-video {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.video-caption {
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 0.92rem;
+  margin: 14px 0 40px;
+}
+
 /* Install / OS tabs */
 
 .tabs {
@@ -492,8 +567,10 @@ a {
 .tabpanel {
   padding: 32px;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 32px;
+  max-width: 640px;
+  margin: 0 auto;
 }
 
 .tabpanel[hidden] {

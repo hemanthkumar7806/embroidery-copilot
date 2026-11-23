@@ -15,6 +15,21 @@ from langchain_openai import ChatOpenAI
 from app.core.config import settings
 from app.core.logging import logger
 
+# Newer Claude generations (Sonnet 5, Opus 5, Fable 5, and Opus 4.7/4.8
+# before them) remove sampling params entirely - passing a non-default
+# `temperature` 400s. Thinking is on by default for these with no
+# `thinking`/`budget_tokens` param to configure, and thinking tokens count
+# against MAX_TOKENS, so give them more output headroom than the shared
+# default assumes.
+_NO_SAMPLING_OVERRIDE_MODELS = {
+    "claude-sonnet-5",
+    "claude-opus-5",
+    "claude-fable-5",
+    "claude-opus-4-7",
+    "claude-opus-4-8",
+}
+_THINKING_MIN_MAX_TOKENS = 16000
+
 
 class LLMRegistry:
     """Registry for the configured chat model."""
@@ -28,10 +43,16 @@ class LLMRegistry:
             **kwargs,
         }
         if settings.LLM_PROVIDER == "anthropic":
+            anthropic_kwargs = dict(common)
+            if name in _NO_SAMPLING_OVERRIDE_MODELS:
+                anthropic_kwargs.pop("temperature", None)
+                anthropic_kwargs["max_tokens"] = max(
+                    anthropic_kwargs["max_tokens"], _THINKING_MIN_MAX_TOKENS
+                )
             return ChatAnthropic(
                 model=name,
                 api_key=settings.ANTHROPIC_API_KEY,
-                **common,
+                **anthropic_kwargs,
             )
         if settings.LLM_PROVIDER == "groq":
             return ChatOpenAI(
@@ -39,6 +60,23 @@ class LLMRegistry:
                 api_key=settings.GROQ_API_KEY,
                 base_url=settings.GROQ_BASE_URL,
                 **common,
+            )
+        if settings.LLM_PROVIDER == "openrouter":
+            # OpenRouter proxies real Anthropic models but via an
+            # OpenAI-compatible endpoint - it does NOT accept Anthropic's
+            # native `thinking` param, so extended thinking stays off
+            # (cheaper: no thinking tokens billed as output) unless
+            # OPENROUTER_REASONING_EFFORT is explicitly set.
+            openrouter_kwargs = dict(common)
+            if settings.OPENROUTER_REASONING_EFFORT:
+                openrouter_kwargs["extra_body"] = {
+                    "reasoning": {"effort": settings.OPENROUTER_REASONING_EFFORT}
+                }
+            return ChatOpenAI(
+                model=name,
+                api_key=settings.OPENROUTER_API_KEY,
+                base_url=settings.OPENROUTER_BASE_URL,
+                **openrouter_kwargs,
             )
         if settings.LLM_PROVIDER == "gemini":
             return ChatGoogleGenerativeAI(

@@ -44,6 +44,11 @@ class Settings:
     ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
     GROQ_BASE_URL: str = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+    OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "")
+    OPENROUTER_BASE_URL: str = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+    # Optional: "low" | "medium" | "high" | "max". Leave unset to omit
+    # reasoning entirely (cheaper - no thinking tokens billed as output).
+    OPENROUTER_REASONING_EFFORT: str = os.getenv("OPENROUTER_REASONING_EFFORT", "").strip()
     AWS_REGION: str = os.getenv("AWS_REGION", os.getenv("AWS_DEFAULT_REGION", "us-east-1"))
     DEFAULT_LLM_MODEL: str = os.getenv("DEFAULT_LLM_MODEL", "")
     DEFAULT_LLM_TEMPERATURE: float = float(os.getenv("DEFAULT_LLM_TEMPERATURE", "0.2"))
@@ -86,6 +91,7 @@ class Settings:
                 "anthropic": "claude-3-5-sonnet-20241022",
                 "groq": "llama-3.1-8b-instant",
                 "bedrock": "anthropic.claude-3-5-sonnet-20240620-v1:0",
+                "openrouter": "anthropic/claude-sonnet-5",
             }
             self.DEFAULT_LLM_MODEL = defaults.get(self.LLM_PROVIDER, "gpt-4o-mini")
 
@@ -126,6 +132,8 @@ class Settings:
             return bool(self.ANTHROPIC_API_KEY)
         if self.LLM_PROVIDER == "groq":
             return bool(self.GROQ_API_KEY)
+        if self.LLM_PROVIDER == "openrouter":
+            return bool(self.OPENROUTER_API_KEY)
         if self.LLM_PROVIDER == "gemini":
             return bool(self.GEMINI_API_KEY)
         return bool(self.OPENAI_API_KEY)

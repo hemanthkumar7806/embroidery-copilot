@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -67,6 +67,12 @@ def _loads(raw: str | None) -> dict[str, Any] | None:
 
 
 def command_to_out(cmd: Any) -> CommandOut:
+    # SQLite drops tzinfo on round-trip - created_at is UTC by convention
+    # (see AgentCommand's default factory), so re-attach it before Pydantic
+    # serializes it, or the admin UI misreads it as local time.
+    created_at = cmd.created_at
+    if created_at is not None and created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=UTC)
     return CommandOut(
         id=cmd.id,
         session_id=cmd.session_id,
@@ -76,5 +82,5 @@ def command_to_out(cmd: Any) -> CommandOut:
         payload=_loads(cmd.payload_json) or {},
         status=cmd.status,
         result=_loads(cmd.result_json),
-        created_at=cmd.created_at,
+        created_at=created_at,
     )

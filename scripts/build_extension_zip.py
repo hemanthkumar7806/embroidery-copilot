@@ -15,7 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SRC_DIR = ROOT / "inkscape_extension"
 OUT_DIR = ROOT / "dist"
-TOP_LEVEL = "Inkscape-AI"
+TOP_LEVEL = "StitchBase"
 OUT_ZIP = OUT_DIR / f"{TOP_LEVEL}.zip"
 
 # (filename, is_executable)

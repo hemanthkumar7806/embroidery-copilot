@@ -29,3 +29,6 @@ venv/
 # Test / coverage
 coverage/
 .pytest_cache/
+
+# Private keys
+*.pem

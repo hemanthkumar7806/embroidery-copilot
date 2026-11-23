@@ -440,10 +440,25 @@ async def run_ai_review(
         rag_context=rag_context,
         image=image,
     )
-    try:
-        response = await llm_service.invoke(build_review_messages(inputs))
-    except Exception as exc:  # noqa: BLE001 - never let a review failure break the flow
-        logger.warning("ai_review_llm_failed", error=str(exc))
-        return []
     existing_issues = [i for i in (rules_payload.get("issues") or []) if isinstance(i, dict)]
-    return parse_findings(_message_text(response.content), design_report, chunks, existing_issues)
+    messages = build_review_messages(inputs)
+
+    # Without extended thinking / enforced JSON mode, "return a JSON array" is a soft
+    # prompt instruction the model doesn't always follow - it can come back with prose,
+    # a truncated array, or otherwise unparseable text with zero API-level error. That's
+    # indistinguishable from "the model genuinely found nothing" unless logged, so log
+    # the raw text on an empty result, and retry once before accepting "no findings".
+    for attempt in (1, 2):
+        try:
+            response = await llm_service.invoke(messages)
+        except Exception as exc:  # noqa: BLE001 - never let a review failure break the flow
+            logger.warning("ai_review_llm_failed", attempt=attempt, error=str(exc))
+            return []
+        text = _message_text(response.content)
+        findings = parse_findings(text, design_report, chunks, existing_issues)
+        if findings:
+            return findings
+        logger.warning(
+            "ai_review_empty_result", attempt=attempt, response_preview=text[:500]
+        )
+    return []

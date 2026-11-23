@@ -50,36 +50,77 @@ cd "$REMOTE_APP_DIR"
 
 docker build -t ${CONTAINER_NAME}:latest .
 
-# Keep the old container around (stopped) as an instant rollback point.
+# Capture the container's Docker network(s) BEFORE recreating it — Caddy reaches this
+# container by Docker DNS name (e.g. "inkscape-ai:8000"), which only resolves within a
+# shared user-defined network. A plain \`docker run\` without --network lands on the
+# isolated default bridge network and silently breaks Caddy's reverse_proxy (502,
+# "no such host") even though the container itself is perfectly healthy. Losing this once
+# is exactly what happened; this is deploy_ec2.sh preserving it automatically from now on.
+PREV_NETWORKS=""
 if docker container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
+  PREV_NETWORKS="\$(docker inspect "$CONTAINER_NAME" --format '{{range \$k,\$v := .NetworkSettings.Networks}}{{\$k}} {{end}}')"
   docker rm -f "${CONTAINER_NAME}-prev" >/dev/null 2>&1 || true
   docker rename "$CONTAINER_NAME" "${CONTAINER_NAME}-prev" || true
   docker stop "${CONTAINER_NAME}-prev" >/dev/null 2>&1 || true
 fi
 
+NETWORK_FLAG=""
+EXTRA_NETWORKS=""
+first=1
+for net in \$PREV_NETWORKS; do
+  if [ "\$first" = 1 ]; then
+    NETWORK_FLAG="--network \$net"
+    first=0
+  else
+    EXTRA_NETWORKS="\$EXTRA_NETWORKS \$net"
+  fi
+done
+
 docker run -d \
   --name "$CONTAINER_NAME" \
   --restart unless-stopped \
+  \$NETWORK_FLAG \
   -p 127.0.0.1:${HOST_PORT}:8000 \
   --env-file "$REMOTE_APP_DIR/.env" \
   -v "$REMOTE_APP_DIR/data:/app/data" \
   "${CONTAINER_NAME}:latest"
 
-echo "Waiting for health check..."
+for net in \$EXTRA_NETWORKS; do
+  docker network connect "\$net" "$CONTAINER_NAME" || true
+done
+
+rollback() {
+  echo "\$1 — rolling back to previous container."
+  docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+  docker rename "${CONTAINER_NAME}-prev" "$CONTAINER_NAME" || true
+  docker start "$CONTAINER_NAME" || true
+  exit 1
+}
+
+echo "Waiting for container health check (direct, bypasses Caddy)..."
+container_ok=0
 for i in \$(seq 1 10); do
   if curl -fsS "http://127.0.0.1:${HOST_PORT}/health" >/dev/null 2>&1; then
-    echo "Healthy."
-    docker rm -f "${CONTAINER_NAME}-prev" >/dev/null 2>&1 || true
-    exit 0
+    container_ok=1
+    break
   fi
   sleep 2
 done
+[ "\$container_ok" = 1 ] || rollback "Container health check FAILED"
 
-echo "Health check FAILED — rolling back to previous container."
-docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
-docker rename "${CONTAINER_NAME}-prev" "$CONTAINER_NAME" || true
-docker start "$CONTAINER_NAME" || true
-exit 1
+echo "Waiting for end-to-end health check through Caddy (the real public path)..."
+edge_ok=0
+for i in \$(seq 1 10); do
+  if curl -fsS "https://app.stitchbase.online/health" >/dev/null 2>&1; then
+    edge_ok=1
+    break
+  fi
+  sleep 2
+done
+[ "\$edge_ok" = 1 ] || rollback "End-to-end health check through Caddy FAILED (container is up but unreachable via Caddy — network misconfiguration?)"
+
+echo "Healthy end-to-end."
+docker rm -f "${CONTAINER_NAME}-prev" >/dev/null 2>&1 || true
 REMOTE
 
-echo "==> Done. Live at https://stitchbase.duckdns.org/health"
+echo "==> Done. Live at https://app.stitchbase.online/health"

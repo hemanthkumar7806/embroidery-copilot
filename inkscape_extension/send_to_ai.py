@@ -45,7 +45,7 @@ except Exception:  # pragma: no cover - worker process path
     inkex = None  # type: ignore[assignment]
     _HAVE_INKEX = False
 
-DEFAULT_URL = "https://stitchbase.duckdns.org"
+DEFAULT_URL = "https://app.stitchbase.online"
 PROBE_TIMEOUT_S = 3
 # Real designs run to hundreds of KB and the session write goes to a remote Postgres,
 # so a legitimate upload can take several seconds. Timing out early just retries and

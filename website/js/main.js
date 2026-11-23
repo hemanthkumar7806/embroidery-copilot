@@ -4,7 +4,7 @@
   // OS install tabs
   var tabs = Array.prototype.slice.call(document.querySelectorAll('[role="tab"]'));
 
-  function selectTab(tab) {
+  function selectTab(tab, focusTab) {
     tabs.forEach(function (t) {
       var selected = t === tab;
       t.setAttribute("aria-selected", String(selected));
@@ -12,12 +12,12 @@
       var panel = document.getElementById(t.getAttribute("aria-controls"));
       if (panel) panel.hidden = !selected;
     });
-    tab.focus();
+    if (focusTab) tab.focus();
   }
 
   tabs.forEach(function (tab, index) {
     tab.addEventListener("click", function () {
-      selectTab(tab);
+      selectTab(tab, true);
     });
     tab.addEventListener("keydown", function (event) {
       var newIndex = null;
@@ -25,12 +25,14 @@
       if (event.key === "ArrowLeft") newIndex = (index - 1 + tabs.length) % tabs.length;
       if (newIndex !== null) {
         event.preventDefault();
-        selectTab(tabs[newIndex]);
+        selectTab(tabs[newIndex], true);
       }
     });
   });
 
-  // Detect the visitor's OS and pre-select the matching install tab
+  // Detect the visitor's OS and pre-select the matching install tab.
+  // Never focus here — this runs on every page load and focusing would
+  // scroll the page straight down to the Install section.
   function detectOsTabId() {
     var platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
     platform = platform.toLowerCase();
@@ -43,7 +45,7 @@
   var detectedId = detectOsTabId();
   if (detectedId) {
     var detectedTab = document.getElementById(detectedId);
-    if (detectedTab) selectTab(detectedTab);
+    if (detectedTab) selectTab(detectedTab, false);
   }
 
   // Footer year

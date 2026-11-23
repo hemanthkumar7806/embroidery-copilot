@@ -34,8 +34,14 @@ def _enabled() -> bool:
     return settings.ANALYTICS_ENABLED
 
 
-def summarize_rules(rules_payload: dict | None, top_n: int = 5) -> tuple[Optional[str], int, list[dict]]:
-    """Extract (rule_status, issue_count, top_issues) from a rule-engine payload."""
+def summarize_rules(rules_payload: dict | None, top_n: int = 100) -> tuple[Optional[str], int, list[dict]]:
+    """Extract (rule_status, issue_count, top_issues) from a rule-engine payload.
+
+    top_n is generous (not really "top" N) so the admin replay view can
+    reconstruct the full findings panel the user actually saw, not just a
+    5-item summary. capability is included so it can be grouped into the
+    same auto_fix/guided/recommendation tiers as the real UI.
+    """
     if not rules_payload:
         return None, 0, []
     decision = rules_payload.get("decision") or {}
@@ -47,6 +53,8 @@ def summarize_rules(rules_payload: dict | None, top_n: int = 5) -> tuple[Optiona
             "title": i.get("title", ""),
             "severity": i.get("severity", ""),
             "category": i.get("category", ""),
+            "capability": i.get("capability", "recommendation"),
+            "detail": i.get("detail", ""),
         }
         for i in issues[:top_n]
     ]
@@ -176,6 +184,35 @@ def update_session_svg(
             db.commit()
     except Exception as exc:  # noqa: BLE001
         logger.warning("analytics_session_update_failed", error=str(exc))
+
+
+def update_session_issues(
+    session_id: str,
+    rule_status: Optional[str],
+    issue_count: Optional[int],
+    top_issues: Optional[list[dict]],
+) -> None:
+    """Refresh just the issue/verdict fields after AI review adds findings.
+
+    Deliberately narrower than update_session_svg - that one overwrites the SVG
+    snapshot (bytes/dimensions/text) unconditionally, which would wipe the admin
+    preview if called here without re-supplying them. AI review only changes the
+    findings, not the file, so only the findings should move.
+    """
+    if not _enabled():
+        return
+    try:
+        with DBSession(database_service.engine) as db:
+            row = db.get(AnalyticsSession, session_id)
+            if not row:
+                return
+            row.rule_status = rule_status
+            row.issue_count = issue_count
+            row.top_issues_json = json.dumps(top_issues or [])
+            db.add(row)
+            db.commit()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("analytics_session_issues_update_failed", error=str(exc))
 
 
 def link_visitor_to_session(
@@ -431,11 +468,12 @@ def session_detail(session_id: str) -> Optional[dict]:
         return detail
 
 
-def recent_events(limit: int = 200) -> list[dict]:
+def recent_events(limit: int = 200, visitor_id: Optional[str] = None) -> list[dict]:
     with DBSession(database_service.engine) as db:
-        rows = db.exec(
-            select(AnalyticsEvent).order_by(desc(AnalyticsEvent.created_at)).limit(limit)
-        ).all()
+        stmt = select(AnalyticsEvent).order_by(desc(AnalyticsEvent.created_at))
+        if visitor_id:
+            stmt = stmt.where(AnalyticsEvent.visitor_id == visitor_id)
+        rows = db.exec(stmt.limit(limit)).all()
         return [_event_dict(e) for e in rows]
 
 
@@ -444,7 +482,20 @@ def recent_events(limit: int = 200) -> list[dict]:
 # --------------------------------------------------------------------------- #
 
 def _iso(dt: Optional[datetime]) -> Optional[str]:
-    return dt.isoformat() if dt else None
+    """ISO-8601 with an explicit UTC offset.
+
+    SQLite has no timestamptz type, so a timezone-aware `datetime.now(UTC)`
+    round-trips through it as naive (tzinfo lost) - dt.isoformat() would then
+    omit the offset, and the browser's `new Date(...)` parses that as local
+    time instead of UTC, silently shifting every displayed time. All stored
+    timestamps are UTC by convention (see the model default factories), so
+    re-attaching UTC here is always correct, not an assumption per-row.
+    """
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return dt.isoformat()
 
 
 def _visitor_dict(v: AnalyticsVisitor) -> dict:

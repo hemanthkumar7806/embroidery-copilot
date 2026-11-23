@@ -6,7 +6,7 @@ from typing import Optional
 
 from sqlalchemy import event
 from sqlmodel import Session as DBSession
-from sqlmodel import SQLModel, create_engine, select
+from sqlmodel import SQLModel, create_engine, desc, select
 
 from app.core.config import settings
 from app.core.logging import logger
@@ -219,6 +219,19 @@ class DatabaseService:
             for cmd in created:
                 db.refresh(cmd)
         return created
+
+    def list_commands(self, session_id: str, limit: int = 200) -> list[AgentCommand]:
+        """Every apply/highlight/verify/revert ever queued for a session, any
+        status, newest first - the admin action log ("did they click fix/undo").
+        """
+        with DBSession(self.engine) as db:
+            stmt = (
+                select(AgentCommand)
+                .where(AgentCommand.session_id == session_id)
+                .order_by(desc(AgentCommand.created_at))
+                .limit(limit)
+            )
+            return list(db.exec(stmt).all())
 
     def pending_commands(self, session_id: str, limit: int = 50) -> list[AgentCommand]:
         with DBSession(self.engine) as db:
